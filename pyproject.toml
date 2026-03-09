@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xpctl"
+dynamic = ["version"]
+description = "Windows XP remote management toolkit with SSH and agent transports."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Nick Ficano" },
+]
+keywords = ["windows-xp", "ssh", "debugging", "reverse-engineering", "automation"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Debuggers",
+  "Topic :: System :: Systems Administration",
+]
+dependencies = [
+  "click>=8.1",
+  "paramiko>=3.4",
+  "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "pre-commit>=4.0",
+  "pytest>=8.3",
+  "ruff>=0.15",
+  "twine>=6.1",
+]
+docs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.6",
+]
+
+[project.scripts]
+xpctl = "xpctl.cli:main"
+
+[project.urls]
+Documentation = "https://nficano.github.io/xpctl/"
+Issues = "https://github.com/nficano/xpctl/issues"
+Repository = "https://github.com/nficano/xpctl"
+
+[tool.hatch.version]
+path = "src/xpctl/__about__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/xpctl"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+src = ["src", "tests", "scripts"]
+extend-exclude = [
+  "src/xpctl/assets/agent.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B"]
+ignore = ["B008", "E501"]
+
+[tool.ruff.format]
+quote-style = "double"

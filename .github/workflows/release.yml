@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Install debaser
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="nficano/debaser"
+          version="$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
+          target="x86_64-unknown-linux-gnu"
+          asset="debaser-${version}-${target}.tar.gz"
+          base="https://github.com/${repo}/releases/download/${version}"
+          curl -fsSL "$base/$asset" -o "$asset"
+          tar -xzf "$asset"
+          sudo install -m 0755 "debaser-${version}-${target}/debaser" /usr/local/bin/debaser
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          package_version="$(python -c 'from xpctl.__about__ import __version__; print(__version__)')"
+          if [[ "$tag" != "$package_version" ]]; then
+            echo "Tag version ($tag) does not match package version ($package_version)" >&2
+            exit 1
+          fi
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Validate distributions
+        run: twine check dist/*
+
+      - name: Generate release name
+        id: debaser
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(debaser --checksum "${GITHUB_SHA}")"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ github.ref_name }} (${{ steps.debaser.outputs.name }})"
+          body: |
+            Release name: `${{ steps.debaser.outputs.name }}`
+
+            This release was built from `${{ github.sha }}` and published automatically.
+          files: dist/*

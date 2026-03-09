@@ -1,0 +1,21 @@
+site_name: xpctl
+site_url: https://nficano.github.io/xpctl/
+repo_url: https://github.com/nficano/xpctl
+repo_name: nficano/xpctl
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+nav:
+  - Overview: index.md
+  - Getting Started: getting-started.md
+  - CLI: cli.md
+  - Releases: releasing.md
