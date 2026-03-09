@@ -16,6 +16,7 @@ from typing import Any
 
 import paramiko
 
+from xpctl.resources import read_remote_script
 from xpctl.transport.base import Transport
 
 _JSON_MARKER = "__XPSH_JSON__"
@@ -242,84 +243,15 @@ class SSHTransport(Transport):
         }
 
     def _handle_file_list(self, params: dict[str, Any]) -> dict[str, Any]:
-        script = """
-import os
-
-path = payload.get("path", ".")
-recursive = bool(payload.get("recursive", False))
-
-if not os.path.isdir(path):
-    raise ValueError("Directory not found: {0}".format(path))
-
-def stat_entry(p):
-    try:
-        st = os.stat(p)
-        return {
-            "name": os.path.basename(p),
-            "path": p,
-            "exists": True,
-            "type": "dir" if os.path.isdir(p) else "file",
-            "size": st.st_size,
-            "mtime": st.st_mtime,
-        }
-    except OSError:
-        return {"name": os.path.basename(p), "path": p, "exists": False}
-
-entries = []
-if recursive:
-    for root, dirs, files in os.walk(path):
-        for d in dirs:
-            entries.append(stat_entry(os.path.join(root, d)))
-        for f in files:
-            entries.append(stat_entry(os.path.join(root, f)))
-else:
-    for name in os.listdir(path):
-        entries.append(stat_entry(os.path.join(path, name)))
-
-result = {"entries": entries}
-"""
+        script = read_remote_script("file_list")
         return self._run_python_json(script, params, timeout=60)
 
     def _handle_file_delete(self, params: dict[str, Any]) -> dict[str, Any]:
-        script = """
-import os
-import shutil
-
-path = payload.get("path", "")
-recursive = bool(payload.get("recursive", False))
-
-if os.path.isdir(path):
-    if recursive:
-        shutil.rmtree(path)
-    else:
-        os.rmdir(path)
-elif os.path.isfile(path):
-    os.remove(path)
-else:
-    raise ValueError("Path not found: {0}".format(path))
-
-result = {"deleted": True, "path": path}
-"""
+        script = read_remote_script("file_delete")
         return self._run_python_json(script, params, timeout=60)
 
     def _handle_file_stat(self, params: dict[str, Any]) -> dict[str, Any]:
-        script = """
-import os
-
-path = payload.get("path", "")
-if not os.path.exists(path):
-    result = {"exists": False, "path": path}
-else:
-    st = os.stat(path)
-    result = {
-        "name": os.path.basename(path),
-        "path": path,
-        "exists": True,
-        "type": "dir" if os.path.isdir(path) else "file",
-        "size": st.st_size,
-        "mtime": st.st_mtime,
-    }
-"""
+        script = read_remote_script("file_stat")
         return self._run_python_json(script, params, timeout=30)
 
     def _handle_sysinfo(self) -> dict[str, Any]:
@@ -447,11 +379,9 @@ else:
         self, code: str, timeout: int = 30
     ) -> subprocess.CompletedProcess[str]:
         encoded = base64.b64encode(code.encode("utf-8")).decode("ascii")
-        py_cmd = (
-            "import base64; "
-            "exec(compile(base64.b64decode('{0}').decode('utf-8'), "
-            "'xpctl_inline', 'exec'))"
-        ).format(encoded)
+        py_cmd = read_remote_script("run_python_wrapper").replace(
+            "__CODE_B64__", encoded
+        )
         py_exe = shlex.quote(self._to_cygwin_path(self.python_path))
         return self._run_bash(f"{py_exe} -c {shlex.quote(py_cmd)}", timeout=timeout)
 
@@ -466,13 +396,11 @@ else:
         )
         script_b64 = base64.b64encode(script.encode("utf-8")).decode("ascii")
         runner = (
-            "import base64, json\n"
-            "payload = json.loads(base64.b64decode('{payload}').decode('utf-8'))\n"
-            "code = base64.b64decode('{script}').decode('utf-8')\n"
-            "ns = {{'payload': payload}}\n"
-            "exec(compile(code, 'xpctl_payload', 'exec'), ns)\n"
-            "print('{marker}' + json.dumps(ns.get('result', {{}})))\n"
-        ).format(payload=payload_b64, script=script_b64, marker=_JSON_MARKER)
+            read_remote_script("run_python_json")
+            .replace("__PAYLOAD_B64__", payload_b64)
+            .replace("__SCRIPT_B64__", script_b64)
+            .replace("__JSON_MARKER__", _JSON_MARKER)
+        )
 
         result = self._run_python(runner, timeout=timeout)
         if result.returncode != 0:

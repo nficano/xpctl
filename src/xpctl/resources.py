@@ -12,3 +12,10 @@ def write_agent_source(destination: str | Path) -> Path:
     source = files("xpctl.assets").joinpath("agent.py").read_text(encoding="utf-8")
     target.write_text(source, encoding="utf-8", newline="\n")
     return target
+
+
+def read_remote_script(name: str) -> str:
+    """Read a bundled remote Python script by name."""
+    return (
+        files("xpctl.assets.scripts").joinpath(f"{name}.py").read_text(encoding="utf-8")
+    )

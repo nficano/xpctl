@@ -22,6 +22,7 @@ from rich.table import Table
 from xpctl.client import XPClient
 from xpctl.debuggers import DEBUGGER_DESCRIPTIONS
 from xpctl.deploy import AgentDeployer
+from xpctl.resources import read_remote_script
 from xpctl.transport.ssh import SSHTransport
 
 console = Console()
@@ -823,82 +824,7 @@ def dll_list(ctx, pid, timeout):
 @click.pass_context
 def dll_inject(ctx, pid, dll_path, timeout):
     """Inject a DLL via CreateRemoteThread + LoadLibraryA."""
-    script = r"""
-import ctypes
-
-PROCESS_CREATE_THREAD = 0x0002
-PROCESS_QUERY_INFORMATION = 0x0400
-PROCESS_VM_OPERATION = 0x0008
-PROCESS_VM_WRITE = 0x0020
-PROCESS_VM_READ = 0x0010
-MEM_COMMIT = 0x1000
-MEM_RESERVE = 0x2000
-PAGE_READWRITE = 0x04
-INFINITE = 0xFFFFFFFF
-
-pid = int(payload["pid"])
-dll_path = payload["dll_path"]
-dll_bytes = dll_path.encode("ascii") + b"\x00"
-
-kernel32 = ctypes.windll.kernel32
-h_process = kernel32.OpenProcess(
-    PROCESS_CREATE_THREAD
-    | PROCESS_QUERY_INFORMATION
-    | PROCESS_VM_OPERATION
-    | PROCESS_VM_WRITE
-    | PROCESS_VM_READ,
-    False,
-    pid,
-)
-if not h_process:
-    raise RuntimeError("OpenProcess failed")
-
-addr = kernel32.VirtualAllocEx(
-    h_process, 0, len(dll_bytes), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE
-)
-if not addr:
-    kernel32.CloseHandle(h_process)
-    raise RuntimeError("VirtualAllocEx failed")
-
-written = ctypes.c_size_t(0)
-ok = kernel32.WriteProcessMemory(
-    h_process,
-    addr,
-    ctypes.c_char_p(dll_bytes),
-    len(dll_bytes),
-    ctypes.byref(written),
-)
-if not ok:
-    kernel32.CloseHandle(h_process)
-    raise RuntimeError("WriteProcessMemory failed")
-
-h_kernel = kernel32.GetModuleHandleA(b"kernel32.dll")
-load_library = kernel32.GetProcAddress(h_kernel, b"LoadLibraryA")
-if not load_library:
-    kernel32.CloseHandle(h_process)
-    raise RuntimeError("GetProcAddress(LoadLibraryA) failed")
-
-thread_id = ctypes.c_ulong(0)
-h_thread = kernel32.CreateRemoteThread(
-    h_process, 0, 0, load_library, addr, 0, ctypes.byref(thread_id)
-)
-if not h_thread:
-    kernel32.CloseHandle(h_process)
-    raise RuntimeError("CreateRemoteThread failed")
-
-kernel32.WaitForSingleObject(h_thread, INFINITE)
-exit_code = ctypes.c_ulong(0)
-kernel32.GetExitCodeThread(h_thread, ctypes.byref(exit_code))
-kernel32.CloseHandle(h_thread)
-kernel32.CloseHandle(h_process)
-
-result = {
-    "pid": pid,
-    "dll_path": dll_path,
-    "thread_id": int(thread_id.value),
-    "loadlibrary_result": int(exit_code.value),
-}
-"""
+    script = read_remote_script("dll_inject")
     with _client(ctx) as client:
         data = _exec_python_json(
             client,
@@ -963,64 +889,7 @@ def mem():
 def memdump(ctx, pid, local_path, remote_path, timeout):
     """Create a MiniDump for a process and pull it locally."""
     remote_dump = remote_path or r"C:\xpctl\tmp\mem_{0}.dmp".format(pid)
-    script = r"""
-import ctypes
-import os
-
-pid = int(payload["pid"])
-dump_path = payload["dump_path"]
-
-MiniDumpWithFullMemory = 0x00000002
-PROCESS_QUERY_INFORMATION = 0x0400
-PROCESS_VM_READ = 0x0010
-
-if not os.path.isdir(os.path.dirname(dump_path)):
-    os.makedirs(os.path.dirname(dump_path))
-
-kernel32 = ctypes.windll.kernel32
-dbghelp = ctypes.windll.dbghelp
-
-h_process = kernel32.OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, False, pid)
-if not h_process:
-    raise RuntimeError("OpenProcess failed")
-
-CreateFileA = kernel32.CreateFileA
-CreateFileA.argtypes = [ctypes.c_char_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p]
-CreateFileA.restype = ctypes.c_void_p
-
-GENERIC_WRITE = 0x40000000
-CREATE_ALWAYS = 2
-FILE_ATTRIBUTE_NORMAL = 0x80
-
-h_file = CreateFileA(
-    dump_path.encode("ascii"),
-    GENERIC_WRITE,
-    0,
-    None,
-    CREATE_ALWAYS,
-    FILE_ATTRIBUTE_NORMAL,
-    None,
-)
-if h_file == ctypes.c_void_p(-1).value:
-    kernel32.CloseHandle(h_process)
-    raise RuntimeError("CreateFile failed")
-
-ok = dbghelp.MiniDumpWriteDump(
-    h_process,
-    pid,
-    h_file,
-    MiniDumpWithFullMemory,
-    None,
-    None,
-    None,
-)
-kernel32.CloseHandle(h_file)
-kernel32.CloseHandle(h_process)
-if not ok:
-    raise RuntimeError("MiniDumpWriteDump failed")
-
-result = {"path": dump_path, "size": os.path.getsize(dump_path)}
-"""
+    script = read_remote_script("memdump")
     with _client(ctx) as client:
         data = _exec_python_json(
             client,
@@ -1042,31 +911,7 @@ result = {"path": dump_path, "size": os.path.getsize(dump_path)}
 @click.pass_context
 def mem_read(ctx, pid, address, size, timeout):
     """Read process memory and return hex bytes."""
-    script = r"""
-import ctypes
-
-pid = int(payload["pid"])
-address = int(payload["address"], 0)
-size = int(payload["size"])
-
-PROCESS_VM_READ = 0x0010
-PROCESS_QUERY_INFORMATION = 0x0400
-
-kernel32 = ctypes.windll.kernel32
-h_process = kernel32.OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, False, pid)
-if not h_process:
-    raise RuntimeError("OpenProcess failed")
-
-buf = ctypes.create_string_buffer(size)
-read = ctypes.c_size_t(0)
-ok = kernel32.ReadProcessMemory(h_process, ctypes.c_void_p(address), buf, size, ctypes.byref(read))
-kernel32.CloseHandle(h_process)
-if not ok:
-    raise RuntimeError("ReadProcessMemory failed")
-
-raw = buf.raw[: int(read.value)]
-result = {"pid": pid, "address": hex(address), "size": int(read.value), "hex": raw.hex()}
-"""
+    script = read_remote_script("mem_read")
     with _client(ctx) as client:
         data = _exec_python_json(
             client,
@@ -1161,97 +1006,7 @@ def gui():
 @click.pass_context
 def gui_screenshot(ctx, local_path, remote_path, timeout):
     """Capture desktop screenshot to BMP and download it."""
-    script = r"""
-import ctypes
-import os
-import struct
-
-path = payload["path"]
-parent = os.path.dirname(path)
-if parent and not os.path.isdir(parent):
-    os.makedirs(parent)
-
-user32 = ctypes.windll.user32
-gdi32 = ctypes.windll.gdi32
-
-SM_CXSCREEN = 0
-SM_CYSCREEN = 1
-SRCCOPY = 0x00CC0020
-BI_RGB = 0
-DIB_RGB_COLORS = 0
-
-width = user32.GetSystemMetrics(SM_CXSCREEN)
-height = user32.GetSystemMetrics(SM_CYSCREEN)
-
-hdc_screen = user32.GetDC(0)
-hdc_mem = gdi32.CreateCompatibleDC(hdc_screen)
-hbitmap = gdi32.CreateCompatibleBitmap(hdc_screen, width, height)
-gdi32.SelectObject(hdc_mem, hbitmap)
-gdi32.BitBlt(hdc_mem, 0, 0, width, height, hdc_screen, 0, 0, SRCCOPY)
-
-class BITMAPINFOHEADER(ctypes.Structure):
-    _fields_ = [
-        ("biSize", ctypes.c_uint32),
-        ("biWidth", ctypes.c_int32),
-        ("biHeight", ctypes.c_int32),
-        ("biPlanes", ctypes.c_uint16),
-        ("biBitCount", ctypes.c_uint16),
-        ("biCompression", ctypes.c_uint32),
-        ("biSizeImage", ctypes.c_uint32),
-        ("biXPelsPerMeter", ctypes.c_int32),
-        ("biYPelsPerMeter", ctypes.c_int32),
-        ("biClrUsed", ctypes.c_uint32),
-        ("biClrImportant", ctypes.c_uint32),
-    ]
-
-class BITMAPINFO(ctypes.Structure):
-    _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", ctypes.c_uint32 * 3)]
-
-row_stride = ((width * 24 + 31) // 32) * 4
-img_size = row_stride * height
-buf = ctypes.create_string_buffer(img_size)
-bi = BITMAPINFO()
-bi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-bi.bmiHeader.biWidth = width
-bi.bmiHeader.biHeight = height
-bi.bmiHeader.biPlanes = 1
-bi.bmiHeader.biBitCount = 24
-bi.bmiHeader.biCompression = BI_RGB
-bi.bmiHeader.biSizeImage = img_size
-
-ok = gdi32.GetDIBits(hdc_mem, hbitmap, 0, height, buf, ctypes.byref(bi), DIB_RGB_COLORS)
-if not ok:
-    raise RuntimeError("GetDIBits failed")
-
-bfType = b"BM"
-bfOffBits = 14 + 40
-bfSize = bfOffBits + img_size
-file_header = struct.pack("<2sIHHI", bfType, bfSize, 0, 0, bfOffBits)
-info_header = struct.pack(
-    "<IIIHHIIIIII",
-    40,
-    width,
-    height,
-    1,
-    24,
-    0,
-    img_size,
-    0,
-    0,
-    0,
-    0,
-)
-with open(path, "wb") as fh:
-    fh.write(file_header)
-    fh.write(info_header)
-    fh.write(buf.raw)
-
-gdi32.DeleteObject(hbitmap)
-gdi32.DeleteDC(hdc_mem)
-user32.ReleaseDC(0, hdc_screen)
-
-result = {"path": path, "width": width, "height": height, "size": os.path.getsize(path)}
-"""
+    script = read_remote_script("gui_screenshot")
     with _client(ctx) as client:
         _exec_python_json(
             client, script, payload={"path": remote_path}, timeout=timeout
@@ -1265,36 +1020,7 @@ result = {"path": path, "width": width, "height": height, "size": os.path.getsiz
 @click.pass_context
 def gui_window_list(ctx, timeout):
     """List top-level windows."""
-    script = r"""
-import ctypes
-
-user32 = ctypes.windll.user32
-windows = []
-
-EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-
-def _cb(hwnd, lparam):
-    if not user32.IsWindowVisible(hwnd):
-        return True
-    length = user32.GetWindowTextLengthW(hwnd)
-    if length <= 0:
-        return True
-    title_buf = ctypes.create_unicode_buffer(length + 1)
-    user32.GetWindowTextW(hwnd, title_buf, length + 1)
-    class_buf = ctypes.create_unicode_buffer(256)
-    user32.GetClassNameW(hwnd, class_buf, 256)
-    windows.append(
-        {
-            "hwnd": int(hwnd),
-            "title": title_buf.value,
-            "class": class_buf.value,
-        }
-    )
-    return True
-
-user32.EnumWindows(EnumWindowsProc(_cb), 0)
-result = {"windows": windows}
-"""
+    script = read_remote_script("gui_window_list")
     with _client(ctx) as client:
         data = _exec_python_json(client, script, timeout=timeout)
 
@@ -1314,34 +1040,7 @@ result = {"windows": windows}
 @click.pass_context
 def gui_sendkeys(ctx, keys, title, timeout):
     """Send keyboard input (ASCII-focused helper)."""
-    script = r"""
-import ctypes
-import time
-
-keys = payload["keys"]
-title = payload.get("title", "")
-user32 = ctypes.windll.user32
-
-if title:
-    hwnd = user32.FindWindowW(None, title)
-    if hwnd:
-        user32.SetForegroundWindow(hwnd)
-        time.sleep(0.2)
-
-for ch in keys:
-    vk_combo = user32.VkKeyScanA(ord(ch))
-    vk = vk_combo & 0xFF
-    shift = (vk_combo >> 8) & 0xFF
-    if shift & 1:
-        user32.keybd_event(0x10, 0, 0, 0)  # SHIFT down
-    user32.keybd_event(vk, 0, 0, 0)
-    user32.keybd_event(vk, 0, 2, 0)
-    if shift & 1:
-        user32.keybd_event(0x10, 0, 2, 0)  # SHIFT up
-    time.sleep(0.02)
-
-result = {"sent": len(keys), "title": title}
-"""
+    script = read_remote_script("gui_sendkeys")
     with _client(ctx) as client:
         data = _exec_python_json(
             client,
@@ -1527,17 +1226,7 @@ def cat_cmd(ctx, remote_path, timeout):
 @click.pass_context
 def head_cmd(ctx, remote_path, lines, timeout):
     """Print first N lines from a remote file."""
-    script = r"""
-path = payload["path"]
-n = int(payload["lines"])
-with open(path, "r", errors="replace") as fh:
-    content = []
-    for idx, line in enumerate(fh):
-        if idx >= n:
-            break
-        content.append(line.rstrip("\r\n"))
-result = {"text": "\n".join(content)}
-"""
+    script = read_remote_script("head")
     with _client(ctx) as client:
         data = _exec_python_json(
             client,
@@ -1555,13 +1244,7 @@ result = {"text": "\n".join(content)}
 @click.pass_context
 def tail_cmd(ctx, remote_path, lines, timeout):
     """Print last N lines from a remote file."""
-    script = r"""
-path = payload["path"]
-n = int(payload["lines"])
-with open(path, "r", errors="replace") as fh:
-    rows = fh.read().splitlines()
-result = {"text": "\n".join(rows[-n:])}
-"""
+    script = read_remote_script("tail")
     with _client(ctx) as client:
         data = _exec_python_json(
             client,
@@ -1582,28 +1265,7 @@ result = {"text": "\n".join(rows[-n:])}
 @click.pass_context
 def find_cmd(ctx, remote_path, glob_pattern, regex_pattern, timeout):
     """Find files recursively by glob/regex."""
-    script = r"""
-import fnmatch
-import os
-import re
-
-root = payload["root"]
-glob_pattern = payload.get("glob", "*")
-regex_pattern = payload.get("regex", "")
-rx = re.compile(regex_pattern) if regex_pattern else None
-
-matches = []
-for r, _, files in os.walk(root):
-    for name in files:
-        if not fnmatch.fnmatch(name, glob_pattern):
-            continue
-        full = os.path.join(r, name)
-        if rx and not rx.search(full):
-            continue
-        matches.append(full)
-
-result = {"matches": matches}
-"""
+    script = read_remote_script("find")
     with _client(ctx) as client:
         data = _exec_python_json(
             client,
@@ -1622,20 +1284,7 @@ result = {"matches": matches}
 @click.pass_context
 def checksum_cmd(ctx, remote_path, algo, timeout):
     """Calculate remote file checksum."""
-    script = r"""
-import hashlib
-
-path = payload["path"]
-algo = payload["algo"]
-h = hashlib.new(algo)
-with open(path, "rb") as fh:
-    while True:
-        chunk = fh.read(1024 * 1024)
-        if not chunk:
-            break
-        h.update(chunk)
-result = {"algo": algo, "hexdigest": h.hexdigest()}
-"""
+    script = read_remote_script("checksum")
     with _client(ctx) as client:
         data = _exec_python_json(
             client,
