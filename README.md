@@ -1,7 +1,7 @@
 # xpctl
 
 <p align="center">
-  <img src="winxp.png" alt="Windows XP logo" width="50%">
+  <img src="winxp.png" alt="Windows XP logo" width="25%">
 </p>
 
 `xpctl` is a Python CLI and library for managing a Windows XP target over either a
