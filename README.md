@@ -1,5 +1,9 @@
 # xpctl
 
+<p align="center">
+  <img src="winxp.png" alt="Windows XP logo" width="50%">
+</p>
+
 `xpctl` is a Python CLI and library for managing a Windows XP target over either a
 direct TCP agent or SSH. It packages the agent, the transport clients, and the
 higher-level reverse-engineering helpers in one installable project.
