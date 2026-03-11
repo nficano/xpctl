@@ -35,6 +35,16 @@ xpctl upload ./local.bin "C:\\xpctl\\tmp\\local.bin"
 xpctl agent status
 ```
 
+## Bundled installers
+
+The repo keeps Windows XP tooling archives under `installs/`.
+
+- `python-3.4.10.zip`: Python 3.4.10 for Windows XP. This is an unofficial build kept here because a Python 3.4-compatible runtime is needed for the XP agent.
+- `ollydbg-1.10.zip`: OllyDbg 1.10.
+- `x64dbg-2025.08.19.zip`: x64dbg snapshot based on the [2025.08.19 release](https://github.com/x64dbg/x64dbg/releases/tag/2025.08.19). This is the last working release I could find.
+- `windbg`: placeholder, archive to be added later.
+- `cdb`: placeholder, archive to be added later.
+
 ## Development
 
 ```bash
