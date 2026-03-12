@@ -9,8 +9,6 @@ import shutil
 
 INSTALLERS_DIR = Path(__file__).resolve().parent.parent.parent / "installs"
 
-INSTALLERS_DIR = Path(__file__).resolve().parent.parent.parent / "installs"
-
 __all__ = [
     "copy_installer_asset",
     "read_remote_script",
