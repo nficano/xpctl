@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+import time
 from typing import Any
 
 from xpctl.protocol import (
@@ -16,6 +17,8 @@ from xpctl.transport.base import Transport
 
 DEFAULT_PORT = 9578
 DEFAULT_TIMEOUT = 10.0
+CONNECT_ATTEMPTS = 3
+TRANSIENT_CONNECT_ERRNOS = {51, 60, 64, 65}
 
 
 class TCPTransport(Transport):
@@ -31,9 +34,24 @@ class TCPTransport(Transport):
         self._sock: socket.socket | None = None
 
     def connect(self) -> None:
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.settimeout(self.timeout)
-        self._sock.connect((self.host, self.port))
+        last_error: OSError | None = None
+
+        for attempt in range(CONNECT_ATTEMPTS):
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(self.timeout)
+            try:
+                sock.connect((self.host, self.port))
+                self._sock = sock
+                return
+            except OSError as exc:
+                sock.close()
+                last_error = exc
+                if exc.errno not in TRANSIENT_CONNECT_ERRNOS or attempt == CONNECT_ATTEMPTS - 1:
+                    raise
+                time.sleep(0.2 * (attempt + 1))
+
+        if last_error is not None:
+            raise last_error
 
     def disconnect(self) -> None:
         if self._sock:
