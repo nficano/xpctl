@@ -10,25 +10,42 @@ import socket
 import struct
 import uuid
 from dataclasses import asdict, dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
+__all__ = [
+    "JSON_MARKER",
+    "MAX_MESSAGE_SIZE",
+    "Message",
+    "MessageType",
+    "Status",
+    "recv_message",
+    "send_message",
+]
+
+JSON_MARKER = "__XPSH_JSON__"
 MAX_MESSAGE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
-class MessageType(str, Enum):
+class MessageType(StrEnum):
+    """Type discriminator for wire-protocol messages."""
+
     REQUEST = "request"
     RESPONSE = "response"
     STREAM = "stream"
 
 
-class Status(str, Enum):
+class Status(StrEnum):
+    """Outcome status for a response message."""
+
     OK = "ok"
     ERROR = "error"
 
 
 @dataclass
 class Message:
+    """Single wire-protocol message exchanged between client and agent."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     type: MessageType = MessageType.REQUEST
     action: str = ""
@@ -38,12 +55,14 @@ class Message:
     error: str | None = None
 
     def to_bytes(self) -> bytes:
+        """Serialize the message to a length-prefixed bytes payload."""
         d = asdict(self)
         payload = json.dumps(d).encode("utf-8")
         return struct.pack("!I", len(payload)) + payload
 
     @classmethod
-    def from_dict(cls, d: dict) -> Message:
+    def from_dict(cls, d: dict[str, Any]) -> Message:
+        """Construct a ``Message`` from a decoded JSON dictionary."""
         return cls(
             id=d.get("id", ""),
             type=MessageType(d["type"]) if "type" in d else MessageType.RESPONSE,
@@ -56,16 +75,27 @@ class Message:
 
 
 def _recv_exact(sock: socket.socket, n: int) -> bytes | None:
-    buf = b""
-    while len(buf) < n:
-        chunk = sock.recv(n - len(buf))
-        if not chunk:
+    """Read exactly *n* bytes from *sock*, returning ``None`` on EOF."""
+    buf = bytearray(n)
+    view = memoryview(buf)
+    pos = 0
+    while pos < n:
+        nbytes = sock.recv_into(view[pos:])
+        if not nbytes:
             return None
-        buf += chunk
-    return buf
+        pos += nbytes
+    return bytes(buf)
 
 
 def recv_message(sock: socket.socket) -> Message | None:
+    """Read a single length-prefixed message from *sock*.
+
+    Returns:
+        The decoded ``Message``, or ``None`` if the connection was closed.
+
+    Raises:
+        ValueError: If the message exceeds ``MAX_MESSAGE_SIZE``.
+    """
     header = _recv_exact(sock, 4)
     if header is None:
         return None
@@ -80,4 +110,5 @@ def recv_message(sock: socket.socket) -> Message | None:
 
 
 def send_message(sock: socket.socket, msg: Message) -> None:
+    """Serialize and send *msg* over *sock*."""
     sock.sendall(msg.to_bytes())

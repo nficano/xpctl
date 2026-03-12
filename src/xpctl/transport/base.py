@@ -5,13 +5,21 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+__all__ = ["Transport"]
+
 
 class Transport(ABC):
-    @abstractmethod
-    def connect(self) -> None: ...
+    """Abstract base class for xpctl transport implementations."""
 
     @abstractmethod
-    def disconnect(self) -> None: ...
+    def connect(self) -> None:
+        """Establish the connection to the remote host."""
+        ...
+
+    @abstractmethod
+    def disconnect(self) -> None:
+        """Tear down the connection and release resources."""
+        ...
 
     @abstractmethod
     def send_request(
@@ -19,12 +27,15 @@ class Transport(ABC):
     ) -> dict[str, Any]:
         """Send a request and return the response data dict.
 
-        Raises ``RuntimeError`` on agent-side errors.
+        Raises:
+            RuntimeError: On agent-side errors.
         """
         ...
 
     @abstractmethod
-    def is_connected(self) -> bool: ...
+    def is_connected(self) -> bool:
+        """Return ``True`` if the transport is currently connected."""
+        ...
 
     def __enter__(self):
         self.connect()

@@ -2,7 +2,7 @@ payload = globals()["payload"]
 
 path = payload["path"]
 n = int(payload["lines"])
-with open(path, "r", errors="replace") as fh:
+with open(path, errors="replace") as fh:
     content = []
     for idx, line in enumerate(fh):
         if idx >= n:

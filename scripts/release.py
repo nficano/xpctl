@@ -67,10 +67,8 @@ def has_origin() -> bool:
 def commit_and_tag(version: str, name: str) -> None:
     tag = f"v{version}"
     message = f"Release {tag} ({name})"
-    run("git", "add", "-A")
-    commit = run("git", "commit", "-m", message, check=False)
-    if commit.returncode not in (0, 1):
-        raise RuntimeError(commit.stderr.strip() or "git commit failed")
+    run("git", "add", str(VERSION_FILE))
+    run("git", "commit", "-m", message)
     run("git", "tag", "-a", tag, "-m", message)
 
 
@@ -85,8 +83,8 @@ def main() -> int:
     args = parse_args()
     current = read_version()
     new_version = args.set_version or bump_version(current, args.bump)
-    write_version(new_version)
     name = release_name()
+    write_version(new_version)
     commit_and_tag(new_version, name)
     if not args.no_push and has_origin():
         push_release(new_version)

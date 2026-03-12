@@ -2,11 +2,12 @@ PYTHON ?= .venv/bin/python
 PIP ?= .venv/bin/pip
 PYTEST ?= .venv/bin/pytest
 RUFF ?= .venv/bin/ruff
+PYRIGHT ?= .venv/bin/pyright
 MKDOCS ?= .venv/bin/mkdocs
 BUMP ?= patch
 VERSION ?=
 
-.PHONY: install format lint test build docs release precommit
+.PHONY: install format lint typecheck test build docs release precommit
 
 install:
 	$(PIP) install -e ".[dev,docs]"
@@ -19,6 +20,9 @@ format:
 lint:
 	$(RUFF) check .
 	$(RUFF) format --check .
+
+typecheck:
+	$(PYRIGHT)
 
 test:
 	$(PYTEST)

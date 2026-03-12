@@ -1,0 +1,7 @@
+import zipfile, os
+dst = r'{{ remote_dir }}'
+if not os.path.isdir(dst):
+    os.makedirs(dst)
+zipfile.ZipFile(r'{{ remote_zip }}').extractall(dst)
+os.remove(r'{{ remote_zip }}')
+result = {'installed': True, 'path': dst}

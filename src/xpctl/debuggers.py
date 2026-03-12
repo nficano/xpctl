@@ -9,9 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+__all__ = ["DEBUGGER_DESCRIPTIONS", "DebugSession"]
+
 
 @dataclass
 class DebugSession:
+    """Represents an active debugger session on the remote host."""
+
     session_id: str
     debugger: str
     target: str

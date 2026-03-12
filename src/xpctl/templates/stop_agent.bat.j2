@@ -1,0 +1,4 @@
+@echo off
+wmic process where "{{ where_clause }}" call terminate
+echo Agent stop requested.
+timeout /t 2

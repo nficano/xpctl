@@ -5,6 +5,8 @@ from __future__ import annotations
 from importlib.resources import files
 from pathlib import Path
 
+__all__ = ["read_remote_script", "write_agent_source"]
+
 
 def write_agent_source(destination: str | Path) -> Path:
     """Write the packaged Windows XP agent to *destination*."""

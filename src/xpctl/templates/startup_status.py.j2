@@ -1,0 +1,19 @@
+import winreg
+key_path = r'{{ reg_key }}'
+value_name = r'{{ reg_name }}'
+try:
+    key = winreg.OpenKey(
+        winreg.HKEY_LOCAL_MACHINE,
+        key_path,
+        0,
+        winreg.KEY_READ,
+    )
+    try:
+        value, _ = winreg.QueryValueEx(key, value_name)
+        result = {'installed': True, 'command': value}
+    except OSError:
+        result = {'installed': False}
+    finally:
+        winreg.CloseKey(key)
+except OSError:
+    result = {'installed': False}

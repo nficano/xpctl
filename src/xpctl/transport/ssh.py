@@ -2,24 +2,62 @@
 
 from __future__ import annotations
 
-import base64
 import csv
-import json
-import os
 import shlex
-import socket as _socket
 import subprocess
-import tempfile
 import time
+from collections.abc import Callable
+from functools import wraps
 from pathlib import PureWindowsPath
-from typing import Any
+from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
 import paramiko
 
 from xpctl.resources import read_remote_script
 from xpctl.transport.base import Transport
+from xpctl.transport.ssh_support import (
+    SFTPAPI,
+    BatchAPI,
+    InstallAPI,
+    PathTranslator,
+    PythonAPI,
+    ShellAPI,
+    quote_cmd_value,
+)
 
-_JSON_MARKER = "__XPSH_JSON__"
+__all__ = ["SSHTransport"]
+
+AUTH_TIMEOUT = 8
+CONNECT_TIMEOUT = 8
+RETRY_ATTEMPTS = 3
+RETRY_BACKOFF_BASE = 1
+SSH_BUFFER_SIZE = 32768
+SSH_POLL_INTERVAL = 0.05
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def _with_ssh_retry(
+    method: Callable[Concatenate[SSHTransport, P], R],
+) -> Callable[Concatenate[SSHTransport, P], R]:
+    """Retry transient SSH command failures with linear backoff."""
+
+    @wraps(method)
+    def wrapper(self: SSHTransport, *args: P.args, **kwargs: P.kwargs) -> R:
+        last_error: Exception | None = None
+        for attempt in range(RETRY_ATTEMPTS):
+            try:
+                return method(self, *args, **kwargs)
+            except subprocess.TimeoutExpired:
+                raise
+            except Exception as exc:
+                last_error = exc
+                if not self._should_retry_exception(exc, attempt):
+                    raise
+                time.sleep(RETRY_BACKOFF_BASE + attempt)
+        raise RuntimeError(f"SSH command execution failed: {last_error}")
+
+    return cast(Callable[..., R], wrapper)
 
 
 class SSHTransport(Transport):
@@ -30,26 +68,56 @@ class SSHTransport(Transport):
         host: str = "127.0.0.1",
         user: str = "",
         password: str = "",
+        verify_host_key: bool = True,
         python_path: str = r"C:\Python34\python.exe",
         bash_path: str = "bash",
     ):
         self.host = host
         self.user = user
         self.password = password
+        self.verify_host_key = verify_host_key
         self.python_path = python_path
         self.bash_path = bash_path
         self._connected = False
         self._client: paramiko.SSHClient | None = None
         self._sftp: paramiko.SFTPClient | None = None
+        self._sftp_error: Exception | None = None
+        self._paths = PathTranslator(python_path=PureWindowsPath(python_path))
+        self._python = PythonAPI(self._run_bash, self._paths)
+        self._shell = ShellAPI(
+            self._run_bash,
+            self._python.run,
+            self._python_version,
+            self._paths,
+        )
+        self._sftp_api = SFTPAPI(
+            self._run_bash,
+            self._ensure_sftp,
+            self._sftp_put,
+            self._sftp_get,
+            self._paths,
+        )
+        self._bat = BatchAPI(
+            self._run_bash,
+            self._sftp_api.ensure_remote_parent,
+            self.scp_push,
+        )
+        self._install = InstallAPI(self._run_python_json, self._paths)
+        self._handlers = self._build_handlers()
 
     def connect(self) -> None:
+        """Open an SSH connection and SFTP channel to the remote host."""
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.load_system_host_keys()
+        if self.verify_host_key:
+            client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        else:
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         connect_args: dict[str, Any] = {
             "hostname": self.host,
-            "timeout": 8,
-            "banner_timeout": 8,
-            "auth_timeout": 8,
+            "timeout": CONNECT_TIMEOUT,
+            "banner_timeout": CONNECT_TIMEOUT,
+            "auth_timeout": AUTH_TIMEOUT,
             "look_for_keys": not bool(self.password),
             "allow_agent": not bool(self.password),
         }
@@ -64,10 +132,16 @@ class SSHTransport(Transport):
             raise ConnectionError(f"SSH connection failed: {exc}") from exc
 
         self._client = client
-        self._sftp = client.open_sftp()
         self._connected = True
+        self._sftp = None
+        self._sftp_error = None
+        try:
+            self._sftp = client.open_sftp()
+        except Exception as exc:
+            self._sftp_error = exc
 
     def disconnect(self) -> None:
+        """Close the SSH and SFTP connections."""
         if self._sftp is not None:
             self._sftp.close()
             self._sftp = None
@@ -79,168 +153,27 @@ class SSHTransport(Transport):
     def send_request(
         self, action: str, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        params = params or {}
-
-        if action == "ping":
-            result = self._run_bash("echo pong", timeout=5)
-            return {"pong": result.returncode == 0 and "pong" in result.stdout.lower()}
-
-        if action == "exec":
-            return self._handle_exec(params)
-
-        if action == "bat_run":
-            return self._handle_bat_run(params)
-
-        if action == "bat_create":
-            return self._handle_bat_create(params)
-
-        if action == "file_upload":
-            return self._handle_file_upload(params)
-
-        if action == "file_download":
-            return self._handle_file_download(params)
-
-        if action == "file_list":
-            return self._handle_file_list(params)
-
-        if action == "file_delete":
-            return self._handle_file_delete(params)
-
-        if action == "file_stat":
-            return self._handle_file_stat(params)
-
-        if action == "sysinfo":
-            return self._handle_sysinfo()
-
-        if action == "proclist":
-            return self._handle_proclist(params)
-
-        if action == "services":
-            return self._handle_services(params)
-
-        if action == "agent_info":
-            return {
-                "version": "ssh-mode",
-                "python": self._python_version(),
-                "transport": "ssh",
-                "shell": "cygwin-bash",
-                "debuggers": {},
-            }
-
-        if action == "agent_shutdown":
-            return {"shutting_down": False, "message": "No TCP agent in SSH mode"}
-
-        if action == "reboot":
-            delay = params.get("delay", 0)
-            force = params.get("force", True)
-            flag = "/f " if force else ""
-            cmd = f"shutdown /r {flag}/t {delay}"
-            self._run_bash(f"cmd.exe /c {shlex.quote(cmd)}", timeout=10)
-            return {"rebooting": True, "command": cmd}
-
-        raise NotImplementedError(f"Action '{action}' not supported over SSH transport")
+        """Dispatch *action* to the appropriate SSH handler and return the result."""
+        handler = self._handlers.get(action)
+        if handler is None:
+            raise NotImplementedError(
+                f"Action '{action}' not supported over SSH transport"
+            )
+        return handler(params or {})
 
     def is_connected(self) -> bool:
+        """Return ``True`` if the SSH session is active."""
         return self._connected
 
+    def run_command(
+        self,
+        command: str,
+        timeout: int = 30,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a raw SSH command and return the completed process."""
+        return self._run_ssh(command, timeout=timeout)
+
     # -- action handlers ----------------------------------------------------
-
-    def _handle_exec(self, params: dict[str, Any]) -> dict[str, Any]:
-        shell = params.get("shell", "cmd")
-        cmd = params.get("cmd", "")
-        timeout = int(params.get("timeout", 30))
-
-        try:
-            if shell == "python":
-                result = self._run_python(cmd, timeout=timeout)
-            elif shell == "python_file":
-                py_exe = shlex.quote(self._to_cygwin_path(self.python_path))
-                script_path = shlex.quote(self._to_cygwin_path(str(cmd)))
-                result = self._run_bash(f"{py_exe} {script_path}", timeout=timeout)
-            elif shell == "bash":
-                result = self._run_bash(cmd, timeout=timeout)
-            else:
-                result = self._run_bash(
-                    f"cmd.exe /c {shlex.quote(str(cmd))}", timeout=timeout
-                )
-            return self._result_to_exec_response(result, timed_out=False)
-        except subprocess.TimeoutExpired as exc:
-            return self._timeout_response(exc)
-
-    def _handle_bat_run(self, params: dict[str, Any]) -> dict[str, Any]:
-        path = str(params.get("path", ""))
-        args = [str(a) for a in params.get("args", [])]
-        timeout = int(params.get("timeout", 60))
-        cmdline = subprocess.list2cmdline([path, *args])
-        try:
-            result = self._run_bash(
-                f"cmd.exe /c {shlex.quote(cmdline)}", timeout=timeout
-            )
-            return self._result_to_exec_response(result, timed_out=False)
-        except subprocess.TimeoutExpired as exc:
-            return self._timeout_response(exc)
-
-    def _handle_bat_create(self, params: dict[str, Any]) -> dict[str, Any]:
-        path = str(params.get("path", ""))
-        content = params.get("content", "")
-        lines = list(content) if isinstance(content, list) else [str(content)]
-
-        self._ensure_remote_parent(path)
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".bat", delete=False, newline=""
-        ) as fh:
-            local_tmp = fh.name
-            fh.write("@echo off\r\n")
-            for line in lines:
-                fh.write(f"{line}\r\n")
-
-        try:
-            self.scp_push(local_tmp, path)
-        finally:
-            try:
-                os.unlink(local_tmp)
-            except OSError:
-                pass
-        return {"path": path, "created": True}
-
-    def _handle_file_upload(self, params: dict[str, Any]) -> dict[str, Any]:
-        path = str(params.get("path", ""))
-        mode = str(params.get("mode", "write")).lower()
-        if mode != "write":
-            raise NotImplementedError("Only mode='write' is supported in SSH mode")
-
-        raw = base64.b64decode(params.get("data", ""))
-        self._ensure_remote_parent(path)
-        with tempfile.NamedTemporaryFile(delete=False) as fh:
-            local_tmp = fh.name
-            fh.write(raw)
-        try:
-            self.scp_push(local_tmp, path)
-        finally:
-            try:
-                os.unlink(local_tmp)
-            except OSError:
-                pass
-        return {"bytes_written": len(raw), "path": path}
-
-    def _handle_file_download(self, params: dict[str, Any]) -> dict[str, Any]:
-        path = str(params.get("path", ""))
-        with tempfile.NamedTemporaryFile(delete=False) as fh:
-            local_tmp = fh.name
-        try:
-            self.scp_pull(path, local_tmp)
-            raw = open(local_tmp, "rb").read()
-        finally:
-            try:
-                os.unlink(local_tmp)
-            except OSError:
-                pass
-
-        return {
-            "data": base64.b64encode(raw).decode("ascii"),
-            "size": len(raw),
-            "path": path,
-        }
 
     def _handle_file_list(self, params: dict[str, Any]) -> dict[str, Any]:
         script = read_remote_script("file_list")
@@ -321,17 +254,18 @@ class SSHTransport(Transport):
     # -- SCP helpers --------------------------------------------------------
 
     def scp_push(self, local_path: str, remote_path: str, timeout: int = 120) -> None:
+        """Upload a local file to the remote host via SFTP."""
         del timeout
-        self._ensure_sftp()
-        self._sftp_put(local_path, remote_path)
+        self._sftp_api.put(local_path, remote_path)
 
     def scp_pull(self, remote_path: str, local_path: str, timeout: int = 120) -> None:
+        """Download a file from the remote host to a local path via SFTP."""
         del timeout
-        self._ensure_sftp()
-        self._sftp_get(remote_path, local_path)
+        self._sftp_api.get(remote_path, local_path)
 
     # -- internal -----------------------------------------------------------
 
+    @_with_ssh_retry
     def _run_ssh(
         self,
         remote_cmd: str,
@@ -339,35 +273,52 @@ class SSHTransport(Transport):
     ) -> subprocess.CompletedProcess[str]:
         if self._client is None:
             raise ConnectionError("Not connected")
+        try:
+            _stdin, stdout, _stderr = self._client.exec_command(
+                remote_cmd,
+                timeout=timeout,
+            )
+            channel = stdout.channel
+            channel.settimeout(timeout)
+            deadline = time.time() + timeout
+            stdout_chunks: list[bytes] = []
+            stderr_chunks: list[bytes] = []
 
-        last_error: Exception | None = None
-        for attempt in range(3):
-            try:
-                stdin, stdout, stderr = self._client.exec_command(
-                    remote_cmd,
-                    timeout=timeout,
-                )
-                del stdin
-                channel = stdout.channel
-                channel.settimeout(timeout)
-                returncode = channel.recv_exit_status()
-                return subprocess.CompletedProcess(
-                    args=["ssh", self.host, remote_cmd],
-                    returncode=returncode,
-                    stdout=stdout.read().decode("utf-8", errors="replace"),
-                    stderr=stderr.read().decode("utf-8", errors="replace"),
-                )
-            except _socket.timeout as exc:
-                raise subprocess.TimeoutExpired(
-                    cmd=remote_cmd,
-                    timeout=timeout,
-                ) from exc
-            except Exception as exc:
-                last_error = exc
-                if attempt < 2:
-                    time.sleep(1 + attempt)
-                    continue
-        raise RuntimeError(f"SSH command execution failed: {last_error}")
+            while True:
+                while channel.recv_ready():
+                    stdout_chunks.append(channel.recv(SSH_BUFFER_SIZE))
+                while channel.recv_stderr_ready():
+                    stderr_chunks.append(channel.recv_stderr(SSH_BUFFER_SIZE))
+
+                if (
+                    channel.exit_status_ready()
+                    and not channel.recv_ready()
+                    and not channel.recv_stderr_ready()
+                ):
+                    break
+
+                if time.time() >= deadline:
+                    channel.close()
+                    raise subprocess.TimeoutExpired(
+                        cmd=remote_cmd,
+                        timeout=timeout,
+                        output=b"".join(stdout_chunks),
+                        stderr=b"".join(stderr_chunks),
+                    )
+                time.sleep(SSH_POLL_INTERVAL)
+
+            returncode = channel.recv_exit_status()
+            return subprocess.CompletedProcess(
+                args=["ssh", self.host, remote_cmd],
+                returncode=returncode,
+                stdout=b"".join(stdout_chunks).decode("utf-8", errors="replace"),
+                stderr=b"".join(stderr_chunks).decode("utf-8", errors="replace"),
+            )
+        except TimeoutError as exc:
+            raise subprocess.TimeoutExpired(
+                cmd=remote_cmd,
+                timeout=timeout,
+            ) from exc
 
     def _run_bash(
         self, command: str, timeout: int = 30
@@ -378,12 +329,7 @@ class SSHTransport(Transport):
     def _run_python(
         self, code: str, timeout: int = 30
     ) -> subprocess.CompletedProcess[str]:
-        encoded = base64.b64encode(code.encode("utf-8")).decode("ascii")
-        py_cmd = read_remote_script("run_python_wrapper").replace(
-            "__CODE_B64__", encoded
-        )
-        py_exe = shlex.quote(self._to_cygwin_path(self.python_path))
-        return self._run_bash(f"{py_exe} -c {shlex.quote(py_cmd)}", timeout=timeout)
+        return self._python.run(code, timeout=timeout)
 
     def _run_python_json(
         self,
@@ -391,65 +337,13 @@ class SSHTransport(Transport):
         payload: dict[str, Any],
         timeout: int = 30,
     ) -> dict[str, Any]:
-        payload_b64 = base64.b64encode(json.dumps(payload).encode("utf-8")).decode(
-            "ascii"
-        )
-        script_b64 = base64.b64encode(script.encode("utf-8")).decode("ascii")
-        runner = (
-            read_remote_script("run_python_json")
-            .replace("__PAYLOAD_B64__", payload_b64)
-            .replace("__SCRIPT_B64__", script_b64)
-            .replace("__JSON_MARKER__", _JSON_MARKER)
-        )
-
-        result = self._run_python(runner, timeout=timeout)
-        if result.returncode != 0:
-            raise RuntimeError(
-                result.stderr.strip() or "Remote python execution failed"
-            )
-
-        idx = result.stdout.rfind(_JSON_MARKER)
-        if idx == -1:
-            raise RuntimeError("Failed to parse JSON payload from remote command")
-
-        payload_text = result.stdout[idx + len(_JSON_MARKER) :].strip()
-        return json.loads(payload_text)
-
-    def _ensure_remote_parent(self, remote_path: str) -> None:
-        parent = self._remote_parent(remote_path)
-        if not parent:
-            return
-        self._run_bash(
-            f"mkdir -p {shlex.quote(self._to_cygwin_path(parent))}", timeout=15
-        )
-
-    def _remote_parent(self, remote_path: str) -> str:
-        if self._looks_like_windows_path(remote_path):
-            parent = str(PureWindowsPath(remote_path).parent)
-            return "" if parent == "." else parent
-        parent = os.path.dirname(remote_path)
-        return "" if parent == "." else parent
+        return self._python.run_json(script, payload, timeout=timeout)
 
     def _to_cygwin_path(self, path: str) -> str:
-        if self._looks_like_windows_path(path):
-            normalized = path.replace("\\", "/")
-            drive = normalized[0].lower()
-            rest = normalized[2:].lstrip("/")
-            while "//" in rest:
-                rest = rest.replace("//", "/")
-            if rest:
-                return f"/cygdrive/{drive}/{rest}"
-            return f"/cygdrive/{drive}"
-        normalized = path.replace("\\", "/")
-        while "//" in normalized:
-            normalized = normalized.replace("//", "/")
-        return normalized
-
-    def _looks_like_windows_path(self, path: str) -> bool:
-        return len(path) >= 2 and path[1] == ":" and path[0].isalpha()
+        return self._paths.to_cygwin_path(path)
 
     def _cmd_quote(self, value: str) -> str:
-        return '"' + value.replace('"', '""') + '"'
+        return quote_cmd_value(value)
 
     def _python_version(self) -> str:
         result = self._run_bash(
@@ -485,21 +379,24 @@ class SSHTransport(Transport):
 
     def _ensure_sftp(self) -> None:
         if self._sftp is None:
-            raise ConnectionError("SFTP channel is not connected")
+            detail = f": {self._sftp_error}" if self._sftp_error is not None else ""
+            raise ConnectionError(f"SFTP channel is not connected{detail}")
 
     def _sftp_put(self, local_path: str, remote_path: str) -> None:
-        target = self._to_cygwin_path(remote_path)
-        self._sftp.put(local_path, target)
+        self._ensure_sftp()
+        assert self._sftp is not None  # guaranteed by _ensure_sftp
+        self._sftp.put(local_path, remote_path)
 
     def _sftp_get(self, remote_path: str, local_path: str) -> None:
-        source = self._to_cygwin_path(remote_path)
-        self._sftp.get(source, local_path)
+        self._ensure_sftp()
+        assert self._sftp is not None  # guaranteed by _ensure_sftp
+        self._sftp.get(remote_path, local_path)
 
-    def _should_retry(self, returncode: int, stderr: str, attempt: int) -> bool:
-        if attempt >= 2:
+    def _should_retry_exception(self, exc: Exception, attempt: int) -> bool:
+        if attempt >= RETRY_ATTEMPTS - 1:
             return False
-        if returncode in (5, 255):
-            return True
+        if isinstance(exc, ConnectionError):
+            return False
         transient = (
             "Connection reset",
             "Connection timed out",
@@ -507,4 +404,26 @@ class SSHTransport(Transport):
             "No route to host",
             "kex_exchange_identification",
         )
-        return any(s in stderr for s in transient)
+        return any(message in str(exc) for message in transient)
+
+    def _build_handlers(self) -> dict[str, Callable[[dict[str, Any]], dict[str, Any]]]:
+        return {
+            "agent_info": lambda _params: self._shell.agent_info(),
+            "agent_shutdown": lambda _params: self._shell.agent_shutdown(),
+            "bat_create": self._bat.create,
+            "bat_run": self._bat.run,
+            "exec": self._shell.exec,
+            "file_delete": self._handle_file_delete,
+            "file_download": self._sftp_api.download,
+            "file_list": self._handle_file_list,
+            "file_stat": self._handle_file_stat,
+            "file_upload": self._sftp_api.upload,
+            "install_startup": self._install.install_startup,
+            "ping": lambda _params: self._shell.ping(),
+            "proclist": self._handle_proclist,
+            "reboot": self._shell.reboot,
+            "remove_startup": self._install.remove_startup,
+            "services": self._handle_services,
+            "startup_status": self._install.startup_status,
+            "sysinfo": lambda _params: self._handle_sysinfo(),
+        }
