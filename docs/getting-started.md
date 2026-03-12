@@ -53,6 +53,23 @@ xpctl ping
 xpctl --profile lab ping
 ```
 
+## Bootstrap a clean XP guest
+
+If the VM does not already have Python or SSH tooling installed, generate a
+bootstrap bundle from the repo:
+
+```bash
+xpctl setup bootstrap
+```
+
+That writes `artifacts/xp-bootstrap/` with the batch file, the packaged agent,
+the pinned Python 3.4.10 archive, and the pinned Cygwin setup executable. Copy
+that folder to the guest and run `bootstrap_xpctl.bat` as an administrator.
+
+The batch installs Python 3.4.10, installs Cygwin plus OpenSSH from the pinned
+HTTP mirror, attempts to configure `sshd`, starts the packaged agent on port
+`9578`, and waits for the listener before exiting.
+
 ## Package contents
 
 - `xpctl.client.XPClient`: high-level Python API

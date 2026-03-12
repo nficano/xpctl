@@ -60,6 +60,23 @@ xpctl agent status
 xpctl agent reboot --wait
 ```
 
+## Bootstrap a fresh XP VM
+
+```bash
+xpctl setup bootstrap
+xpctl setup bootstrap --output-dir ./artifacts/xp-bootstrap
+```
+
+`xpctl setup bootstrap` creates a portable bootstrap directory containing the
+packaged XP agent, the pinned Python 3.4.10 archive, the pinned
+`setup-x86-2.874.exe` Cygwin installer, and `bootstrap_xpctl.bat`.
+
+Run the batch file on the XP host as an administrator. It installs Python,
+installs Cygwin and OpenSSH from
+`http://ctm.crouchingtigerhiddenfruitbat.org/pub/cygwin/circa/2016/08/30/104223/`,
+attempts to configure `sshd`, starts the packaged agent on TCP port `9578`,
+and waits until that listener is up before returning.
+
 ## Reverse engineering helpers
 
 ```bash

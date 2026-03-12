@@ -7,6 +7,7 @@ and repeatable VM management.
 ## Core capabilities
 
 - interactive profile configuration with live connection validation
+- generate an XP bootstrap bundle with Python, Cygwin, OpenSSH, and the agent
 - execute commands on the XP host
 - transfer files to and from the guest
 - manage the packaged agent lifecycle
