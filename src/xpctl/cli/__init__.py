@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import click
 from click.core import ParameterSource
 
@@ -22,7 +24,9 @@ from .system import register_system_commands
 @click.pass_context
 def main(ctx, profile, host, port, transport_mode, password, user, verify_host_key):
     """Xpctl — Remote management toolkit for Windows XP VM."""
-    use_profile_defaults = ctx.get_parameter_source("profile") is not ParameterSource.DEFAULT
+    use_profile_defaults = (
+        ctx.get_parameter_source("profile") is not ParameterSource.DEFAULT
+    )
     resolved = support._resolve_connection_settings(
         profile_name=profile,
         host=host,
@@ -34,7 +38,11 @@ def main(ctx, profile, host, port, transport_mode, password, user, verify_host_k
     )
     resolved["verify_host_key"] = verify_host_key
     ctx.ensure_object(dict).update(resolved)
-    if ctx.invoked_subcommand and ctx.invoked_subcommand != "configure" and not resolved["host"]:
+    if (
+        ctx.invoked_subcommand
+        and ctx.invoked_subcommand != "configure"
+        and not resolved["host"]
+    ):
         raise click.UsageError(
             "Missing host. Provide --host, set XPCTL_HOST, or run `xpctl configure`."
         )
@@ -44,7 +52,7 @@ def _attempt_profile_connection(values: dict[str, str]) -> None:
     client = XPClient(
         host=values["hostname"],
         port=int(values["port"]),
-        transport=values["transport"],
+        transport=cast(TransportMode, values["transport"]),
         user=values["username"],
         password=values["password"],
     )
@@ -83,7 +91,9 @@ def configure(ctx: click.Context, configure_profile: str | None) -> None:
     }
 
     while True:
-        values["hostname"] = support._prompt_string("Hostname or IP", values["hostname"])
+        values["hostname"] = support._prompt_string(
+            "Hostname or IP", values["hostname"]
+        )
         values["port"] = support._prompt_port(values["port"])
         values["username"] = support._prompt_string("Username", values["username"])
         values["password"] = support._prompt_string(

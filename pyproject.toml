@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Windows XP remote management toolkit with SSH and agent transports."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
   { name = "Nick Ficano", email = "nficano@gmail.com" },
 ]
@@ -22,7 +22,6 @@ classifiers = [
   "Operating System :: MacOS",
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
@@ -127,8 +126,10 @@ convention = "google"
 quote-style = "double"
 
 [tool.pyright]
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 pythonPlatform = "All"
 typeCheckingMode = "standard"
+reportMissingImports = "none"
+reportMissingModuleSource = "none"
 include = ["src"]
 exclude = ["src/xpctl/assets/agent.py"]

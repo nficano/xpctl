@@ -28,8 +28,9 @@ xpctl --help
 ```
 
 The repository includes `.python-version` pinned to `3.14.2` so tools like
-`pyenv` and `pipenv` resolve a consistent default interpreter. The package still
-supports Python 3.11+ at runtime.
+`pyenv` and `pipenv` resolve a consistent default interpreter. The package
+targets the latest three CPython releases and currently supports Python 3.12+ at
+runtime.
 
 Common commands:
 
