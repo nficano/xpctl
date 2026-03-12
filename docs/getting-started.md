@@ -8,7 +8,7 @@ python3.14 -m venv .venv
 pip install -e ".[dev,docs]"
 ```
 
-The repo ships with a `.python-version` file pinned to `3.14.3`. This keeps
+The repo ships with a `.python-version` file pinned to `3.14.2`. This keeps
 `pyenv`, `pipenv`, and other version-discovery tools aligned with the same
 default interpreter. `xpctl` itself still supports Python 3.11 and newer.
 
