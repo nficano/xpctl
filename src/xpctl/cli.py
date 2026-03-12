@@ -23,7 +23,12 @@ from xpctl.client import XPClient
 from xpctl.config import DEFAULT_PROFILE, load_profile, save_profile
 from xpctl.debuggers import DEBUGGER_DESCRIPTIONS
 from xpctl.deploy import AgentDeployer
-from xpctl.resources import read_remote_script
+from xpctl.resources import (
+    copy_installer_asset,
+    read_remote_script,
+    write_agent_source,
+    write_bootstrap_batch,
+)
 from xpctl.transport.ssh import SSHTransport
 
 console = Console()
@@ -1745,6 +1750,37 @@ def setup_install(ctx, name, timeout):
     console.print(
         f"[green]Installed {info['description']} to {data.get('path', remote_dir)}[/green]"
     )
+
+
+@setup.command("bootstrap")
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("artifacts/xp-bootstrap"),
+    show_default=True,
+    help="Local directory to populate with the XP bootstrap bundle.",
+)
+def setup_bootstrap(output_dir: Path):
+    """Generate a self-contained XP bootstrap bundle."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    python_archive = "python-3.4.10.zip"
+    cygwin_setup = "setup-x86-2.874.exe"
+
+    try:
+        copy_installer_asset(python_archive, output_dir / python_archive)
+        copy_installer_asset(cygwin_setup, output_dir / cygwin_setup)
+    except (FileNotFoundError, ModuleNotFoundError) as exc:
+        raise click.ClickException(f"Required bootstrap asset is missing: {exc}") from exc
+
+    write_agent_source(output_dir / "agent.py")
+    write_bootstrap_batch(output_dir / "bootstrap_xpctl.bat")
+
+    console.print(f"[green]XP bootstrap bundle created:[/green] {output_dir}")
+    console.print("  - bootstrap_xpctl.bat")
+    console.print(f"  - {python_archive}")
+    console.print(f"  - {cygwin_setup}")
+    console.print("  - agent.py")
 
 
 # ---------------------------------------------------------------------------

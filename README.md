@@ -35,6 +35,7 @@ Common commands:
 
 ```bash
 xpctl configure --profile lab
+xpctl setup bootstrap
 xpctl ping
 xpctl --profile lab ping
 xpctl --profile lab ps
@@ -51,10 +52,31 @@ writes profiles to `~/.xpcli/config`.
 The repo keeps Windows XP tooling archives under `installs/`.
 
 - `python-3.4.10.zip`: Python 3.4.10 for Windows XP. This is an unofficial build kept here because a Python 3.4-compatible runtime is needed for the XP agent.
+- `setup-x86-2.874.exe`: Cygwin setup bootstrap pinned to a Windows XP-era snapshot. The XP bootstrap batch installs from `http://ctm.crouchingtigerhiddenfruitbat.org/pub/cygwin/circa/2016/08/30/104223/`.
 - `ollydbg-1.10.zip`: OllyDbg 1.10.
 - `x64dbg-2025.08.19.zip`: x64dbg snapshot based on the [2025.08.19 release](https://github.com/x64dbg/x64dbg/releases/tag/2025.08.19). This is the last working release I could find.
 - `windbg`: placeholder, archive to be added later.
 - `cdb`: placeholder, archive to be added later.
+
+## XP bootstrap bundle
+
+If you need to bring up a fresh XP VM, generate a local bootstrap bundle:
+
+```bash
+xpctl setup bootstrap
+```
+
+That writes `artifacts/xp-bootstrap/` with:
+
+- `bootstrap_xpctl.bat`
+- `python-3.4.10.zip`
+- `setup-x86-2.874.exe`
+- `agent.py`
+
+Copy that directory onto the XP machine and run `bootstrap_xpctl.bat` as an
+administrator. The batch installs Python 3.4.10, installs Cygwin plus OpenSSH
+from the pinned HTTP mirror, attempts to configure `sshd`, starts the packaged
+agent on port `9578`, and waits until the agent is listening before exiting.
 
 ## Development
 

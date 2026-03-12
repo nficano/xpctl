@@ -64,8 +64,22 @@ Changelog = "https://github.com/nficano/xpctl/blob/main/CHANGELOG.md"
 [tool.hatch.version]
 path = "src/xpctl/__about__.py"
 
+[tool.hatch.build]
+exclude = [
+  ".venv/",
+  ".venv-*/",
+  "artifacts/",
+  "build/",
+  "dist/",
+  "site/",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/xpctl"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"installs/python-3.4.10.zip" = "xpctl/assets/installers/python-3.4.10.zip"
+"installs/setup-x86-2.874.exe" = "xpctl/assets/installers/setup-x86-2.874.exe"
 
 [tool.pytest.ini_options]
 addopts = "-q"
