@@ -20,20 +20,31 @@ higher-level reverse-engineering helpers in one installable project.
 ## Quick start
 
 ```bash
-python3 -m venv .venv
+python3.14 -m venv .venv
 . .venv/bin/activate
 pip install -e ".[dev,docs]"
+xpctl configure
 xpctl --help
 ```
+
+The repository includes `.python-version` pinned to `3.14.3` so tools like
+`pyenv` and `pipenv` resolve a consistent default interpreter. The package still
+supports Python 3.11+ at runtime.
 
 Common commands:
 
 ```bash
+xpctl configure --profile lab
 xpctl ping
-xpctl ps
-xpctl upload ./local.bin "C:\\xpctl\\tmp\\local.bin"
-xpctl agent status
+xpctl --profile lab ping
+xpctl --profile lab ps
+xpctl --profile lab upload ./local.bin "C:\\xpctl\\tmp\\local.bin"
+xpctl --profile lab agent status
 ```
+
+`xpctl configure` behaves like `aws configure`: it walks through host, port,
+username, password, and transport settings, validates the connection live, and
+writes profiles to `~/.xpcli/config`.
 
 ## Bundled installers
 

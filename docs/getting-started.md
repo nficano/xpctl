@@ -3,16 +3,54 @@
 ## Local development install
 
 ```bash
-python3 -m venv .venv
+python3.14 -m venv .venv
 . .venv/bin/activate
 pip install -e ".[dev,docs]"
 ```
+
+The repo ships with a `.python-version` file pinned to `3.14.3`. This keeps
+`pyenv`, `pipenv`, and other version-discovery tools aligned with the same
+default interpreter. `xpctl` itself still supports Python 3.11 and newer.
+
+If you prefer `pipenv`, the default flow is:
+
+```bash
+pipenv install -e ".[dev,docs]"
+pipenv run xpctl --help
+```
+
+## Initial configuration
+
+Run the interactive wizard before your first connection:
+
+```bash
+xpctl configure
+```
+
+For named profiles:
+
+```bash
+xpctl configure --profile lab
+```
+
+The wizard prompts for:
+
+- profile name
+- hostname or IP
+- port
+- username
+- password
+- transport (`auto`, `tcp`, or `ssh`)
+
+It attempts a live connection before saving the profile to `~/.xpcli/config`.
+Subsequent runs pre-fill the existing values and keep them when you press Enter.
 
 ## Verify the install
 
 ```bash
 xpctl --help
-xpctl ping --host 192.0.2.10
+xpctl ping
+xpctl --profile lab ping
 ```
 
 ## Package contents
