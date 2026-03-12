@@ -6,6 +6,7 @@ and repeatable VM management.
 
 ## Core capabilities
 
+- interactive profile configuration with live connection validation
 - execute commands on the XP host
 - transfer files to and from the guest
 - manage the packaged agent lifecycle

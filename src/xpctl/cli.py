@@ -263,6 +263,20 @@ def _attempt_profile_connection(values: dict[str, str]) -> None:
         client.disconnect()
 
 
+def _load_prompt_values(profile_name: str) -> dict[str, str]:
+    saved = load_profile(profile_name)
+    return {
+        "hostname": saved.get("hostname", ""),
+        "port": saved.get("port", CONFIGURE_DEFAULT_PORT) or CONFIGURE_DEFAULT_PORT,
+        "transport": (
+            saved.get("transport", CONFIGURE_DEFAULT_TRANSPORT)
+            or CONFIGURE_DEFAULT_TRANSPORT
+        ),
+        "username": saved.get("username", ""),
+        "password": saved.get("password", ""),
+    }
+
+
 def _run_host_command(
     cmd: list[str],
     ssh_host: str = "",
@@ -328,19 +342,14 @@ def configure(ctx, configure_profile):
     profile_name = configure_profile or ctx.ensure_object(dict).get(
         "profile", DEFAULT_PROFILE
     )
-    saved = load_profile(profile_name)
-    values = {
-        "hostname": saved.get("hostname", ""),
-        "port": saved.get("port", CONFIGURE_DEFAULT_PORT) or CONFIGURE_DEFAULT_PORT,
-        "transport": (
-            saved.get("transport", CONFIGURE_DEFAULT_TRANSPORT)
-            or CONFIGURE_DEFAULT_TRANSPORT
-        ),
-        "username": saved.get("username", ""),
-        "password": saved.get("password", ""),
-    }
+    values = _load_prompt_values(profile_name)
 
     while True:
+        selected_profile = _prompt_string("Profile name", profile_name or DEFAULT_PROFILE)
+        if selected_profile != profile_name:
+            profile_name = selected_profile
+            values = _load_prompt_values(profile_name)
+
         values["hostname"] = _prompt_string("Hostname or IP", values["hostname"])
         values["port"] = _prompt_port(values["port"])
         values["username"] = _prompt_string("Username", values["username"])
