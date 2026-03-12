@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import shlex
 import subprocess
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
@@ -13,6 +15,7 @@ import click
 from rich.console import Console
 
 from xpctl.client import XPClient
+from xpctl.config import DEFAULT_PROFILE, load_profile
 from xpctl.protocol import JSON_MARKER
 from xpctl.transport.ssh_support.translation import quote_cmd_value
 from xpctl.transport.tcp import TCPTransport
@@ -21,31 +24,48 @@ __all__ = ["JSON_MARKER", "common_options", "console", "err_console"]
 
 console = Console()
 err_console = Console(stderr=True)
+TRANSPORT_CHOICES = ("auto", "tcp", "ssh")
+RUNTIME_DEFAULT_PORT = 9578
+CONFIGURE_DEFAULT_PORT = "22"
+CONFIGURE_DEFAULT_TRANSPORT = "auto"
 
 _common = [
     click.option(
+        "--profile",
+        default=DEFAULT_PROFILE,
+        show_default=True,
+        help="Connection profile from ~/.xpcli/config.",
+    ),
+    click.option(
         "--host",
         envvar="XPCTL_HOST",
-        required=True,
+        default=None,
         help="XP VM hostname or IP address.",
     ),
-    click.option("--port", default=9578, type=int, help="Agent TCP port"),
+    click.option(
+        "--port",
+        envvar="XPCTL_PORT",
+        default=None,
+        type=int,
+        help="Port for the selected transport.",
+    ),
     click.option(
         "--transport",
         "transport_mode",
-        type=click.Choice(["auto", "tcp", "ssh"]),
-        default="auto",
+        envvar="XPCTL_TRANSPORT",
+        type=click.Choice(TRANSPORT_CHOICES),
+        default=None,
     ),
     click.option(
         "--password",
-        default="",
+        default=None,
         envvar="XPCTL_SSH_PASSWORD",
         hide_input=True,
         help="Optional SSH password. Leave unset for key-based auth.",
     ),
     click.option(
         "--user",
-        default="",
+        default=None,
         envvar="XPCTL_SSH_USER",
         help="Optional SSH user for SSH transport.",
     ),
@@ -66,17 +86,60 @@ def common_options(fn: Any) -> Any:
     return fn
 
 
+def _resolve_connection_settings(
+    profile_name: str,
+    host: str | None,
+    port: int | None,
+    transport_mode: str | None,
+    user: str | None,
+    password: str | None,
+    use_profile_defaults: bool = True,
+) -> dict[str, str | int | bool]:
+    saved = load_profile(profile_name) if use_profile_defaults else {}
+
+    resolved_host = host if host is not None else (saved.get("hostname") or "")
+    saved_port = saved.get("port", "")
+    resolved_port = port if port is not None else int(saved_port or RUNTIME_DEFAULT_PORT)
+    resolved_transport = (
+        transport_mode
+        if transport_mode is not None
+        else (saved.get("transport") or CONFIGURE_DEFAULT_TRANSPORT)
+    )
+    resolved_user = user if user is not None else saved.get("username", "")
+    resolved_password = password if password is not None else saved.get("password", "")
+
+    return {
+        "profile": profile_name,
+        "host": resolved_host,
+        "port": resolved_port,
+        "transport_mode": resolved_transport,
+        "user": resolved_user,
+        "password": resolved_password,
+    }
+
+
+def _client_class() -> type[XPClient]:
+    cli_module = import_module("xpctl.cli")
+    return getattr(cli_module, "XPClient", XPClient)
+
+
 def _client(ctx: click.Context) -> XPClient:
     """Build an XPClient from the root context params."""
     p = ctx.ensure_object(dict)
-    return XPClient(
-        host=p["host"],
-        port=p["port"],
-        transport=p["transport_mode"],
-        password=p["password"],
-        user=p["user"],
-        verify_host_key=p["verify_host_key"],
-    )
+    client_cls = _client_class()
+    kwargs: dict[str, Any] = {
+        "host": p["host"],
+        "port": p["port"],
+        "transport": p["transport_mode"],
+        "password": p["password"],
+        "user": p["user"],
+    }
+    params = inspect.signature(client_cls).parameters.values()
+    if any(param.kind is inspect.Parameter.VAR_KEYWORD for param in params) or any(
+        param.name == "verify_host_key" for param in params
+    ):
+        kwargs["verify_host_key"] = p["verify_host_key"]
+    return client_cls(**kwargs)
 
 
 def _default_remote_download_dir() -> str:
@@ -146,6 +209,58 @@ def _exec_python_json(
 
 
 _cmd_quote = quote_cmd_value
+
+
+def _prompt_default(value: str, secret: bool = False) -> str:
+    if not value:
+        return "None"
+    if secret:
+        return "****"
+    return value
+
+
+def _prompt_text(label: str, value: str, secret: bool = False) -> str:
+    return f"{label} [{_prompt_default(value, secret=secret)}]"
+
+
+def _prompt_string(label: str, value: str, secret: bool = False) -> str:
+    return click.prompt(
+        _prompt_text(label, value, secret=secret),
+        default=value,
+        hide_input=secret,
+        show_default=False,
+        type=str,
+    )
+
+
+def _prompt_port(value: str) -> str:
+    while True:
+        port_text = click.prompt(
+            _prompt_text("Port", value),
+            default=value,
+            show_default=False,
+            type=str,
+        ).strip()
+        try:
+            port = int(port_text)
+        except ValueError:
+            err_console.print("[red]Port must be an integer.[/red]")
+            value = port_text or value
+            continue
+        if port < 1 or port > 65535:
+            err_console.print("[red]Port must be between 1 and 65535.[/red]")
+            value = port_text
+            continue
+        return str(port)
+
+
+def _prompt_transport(value: str) -> str:
+    return click.prompt(
+        _prompt_text("Transport", value),
+        default=value,
+        show_default=False,
+        type=click.Choice(TRANSPORT_CHOICES, case_sensitive=False),
+    )
 
 
 def _run_host_command(

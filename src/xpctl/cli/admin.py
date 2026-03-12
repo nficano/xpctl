@@ -60,11 +60,14 @@ def register_admin_commands(main: click.Group) -> None:
     @click.pass_context
     def ping(ctx):
         """Check if the agent is alive."""
+        client = support._client(ctx)
         try:
-            with support._client(ctx) as client:
-                ok = client.ping()
+            client.connect()
+            ok = client.ping()
         except Exception:
             ok = False
+        finally:
+            client.disconnect()
 
         if ok:
             support.console.print("[green]Agent is alive[/green]")
