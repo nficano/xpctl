@@ -20,6 +20,7 @@ from rich.console import Console
 from rich.table import Table
 
 from xpctl.client import XPClient
+from xpctl.config import DEFAULT_PROFILE, load_profile, save_profile
 from xpctl.debuggers import DEBUGGER_DESCRIPTIONS
 from xpctl.deploy import AgentDeployer
 from xpctl.resources import read_remote_script
@@ -28,6 +29,10 @@ from xpctl.transport.ssh import SSHTransport
 console = Console()
 err_console = Console(stderr=True)
 JSON_MARKER = "__XPSH_JSON__"
+TRANSPORT_CHOICES = ("auto", "tcp", "ssh")
+RUNTIME_DEFAULT_PORT = 9578
+CONFIGURE_DEFAULT_PORT = "22"
+CONFIGURE_DEFAULT_TRANSPORT = "auto"
 
 # ---------------------------------------------------------------------------
 # Shared options
@@ -35,28 +40,41 @@ JSON_MARKER = "__XPSH_JSON__"
 
 _common = [
     click.option(
+        "--profile",
+        default=DEFAULT_PROFILE,
+        show_default=True,
+        help="Connection profile from ~/.xpcli/config.",
+    ),
+    click.option(
         "--host",
         envvar="XPCTL_HOST",
-        required=True,
+        default=None,
         help="XP VM hostname or IP address.",
     ),
-    click.option("--port", default=9578, type=int, help="Agent TCP port"),
+    click.option(
+        "--port",
+        envvar="XPCTL_PORT",
+        default=None,
+        type=int,
+        help="Port for the selected transport.",
+    ),
     click.option(
         "--transport",
         "transport_mode",
-        type=click.Choice(["auto", "tcp", "ssh"]),
-        default="auto",
+        envvar="XPCTL_TRANSPORT",
+        type=click.Choice(TRANSPORT_CHOICES),
+        default=None,
     ),
     click.option(
         "--password",
-        default="",
+        default=None,
         envvar="XPCTL_SSH_PASSWORD",
         hide_input=True,
         help="Optional SSH password. Leave unset for key-based auth.",
     ),
     click.option(
         "--user",
-        default="",
+        default=None,
         envvar="XPCTL_SSH_USER",
         help="Optional SSH user for SSH transport.",
     ),
@@ -67,6 +85,39 @@ def common_options(fn):
     for opt in reversed(_common):
         fn = opt(fn)
     return fn
+
+
+def _resolve_connection_settings(
+    profile_name: str,
+    host: str | None,
+    port: int | None,
+    transport_mode: str | None,
+    user: str | None,
+    password: str | None,
+) -> dict[str, str | int]:
+    saved = load_profile(profile_name)
+
+    resolved_host = host if host is not None else (saved.get("hostname") or "")
+    saved_port = saved.get("port", "")
+    resolved_port = port if port is not None else int(saved_port or RUNTIME_DEFAULT_PORT)
+    resolved_transport = (
+        transport_mode
+        if transport_mode is not None
+        else (saved.get("transport") or CONFIGURE_DEFAULT_TRANSPORT)
+    )
+    resolved_user = user if user is not None else saved.get("username", "")
+    resolved_password = (
+        password if password is not None else saved.get("password", "")
+    )
+
+    return {
+        "profile": profile_name,
+        "host": resolved_host,
+        "port": resolved_port,
+        "transport_mode": resolved_transport,
+        "user": resolved_user,
+        "password": resolved_password,
+    }
 
 
 def _client(ctx: click.Context) -> XPClient:
@@ -144,6 +195,74 @@ def _cmd_quote(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
+def _prompt_default(value: str, secret: bool = False) -> str:
+    if not value:
+        return "None"
+    if secret:
+        return "****"
+    return value
+
+
+def _prompt_text(label: str, value: str, secret: bool = False) -> str:
+    return f"{label} [{_prompt_default(value, secret=secret)}]"
+
+
+def _prompt_string(label: str, value: str, secret: bool = False) -> str:
+    return click.prompt(
+        _prompt_text(label, value, secret=secret),
+        default=value,
+        hide_input=secret,
+        show_default=False,
+        type=str,
+    )
+
+
+def _prompt_port(value: str) -> str:
+    while True:
+        port_text = click.prompt(
+            _prompt_text("Port", value),
+            default=value,
+            show_default=False,
+            type=str,
+        ).strip()
+        try:
+            port = int(port_text)
+        except ValueError:
+            err_console.print("[red]Port must be an integer.[/red]")
+            value = port_text or value
+            continue
+        if port < 1 or port > 65535:
+            err_console.print("[red]Port must be between 1 and 65535.[/red]")
+            value = port_text
+            continue
+        return str(port)
+
+
+def _prompt_transport(value: str) -> str:
+    return click.prompt(
+        _prompt_text("Transport", value),
+        default=value,
+        show_default=False,
+        type=click.Choice(TRANSPORT_CHOICES, case_sensitive=False),
+    )
+
+
+def _attempt_profile_connection(values: dict[str, str]) -> None:
+    client = XPClient(
+        host=values["hostname"],
+        port=int(values["port"]),
+        transport=values["transport"],
+        user=values["username"],
+        password=values["password"],
+    )
+    try:
+        client.connect()
+        if not client.ping():
+            raise ConnectionError("Connection opened but ping failed")
+    finally:
+        client.disconnect()
+
+
 def _run_host_command(
     cmd: list[str],
     ssh_host: str = "",
@@ -174,15 +293,73 @@ def _run_host_command(
 @click.group()
 @common_options
 @click.pass_context
-def main(ctx, host, port, transport_mode, password, user):
+def main(ctx, profile, host, port, transport_mode, password, user):
     """xpctl — Remote management toolkit for Windows XP VM."""
-    ctx.ensure_object(dict).update(
+    resolved = _resolve_connection_settings(
+        profile_name=profile,
         host=host,
         port=port,
         transport_mode=transport_mode,
-        password=password,
         user=user,
+        password=password,
     )
+    ctx.ensure_object(dict).update(resolved)
+    if ctx.invoked_subcommand and ctx.invoked_subcommand != "configure" and not resolved["host"]:
+        raise click.UsageError(
+            "Missing host. Provide --host, set XPCTL_HOST, or run `xpctl configure`."
+        )
+
+
+# ---------------------------------------------------------------------------
+# configure
+# ---------------------------------------------------------------------------
+
+
+@main.command()
+@click.option(
+    "--profile",
+    "configure_profile",
+    default=None,
+    help="Profile name to configure.",
+)
+@click.pass_context
+def configure(ctx, configure_profile):
+    """Interactively configure a saved connection profile."""
+    profile_name = configure_profile or ctx.ensure_object(dict).get(
+        "profile", DEFAULT_PROFILE
+    )
+    saved = load_profile(profile_name)
+    values = {
+        "hostname": saved.get("hostname", ""),
+        "port": saved.get("port", CONFIGURE_DEFAULT_PORT) or CONFIGURE_DEFAULT_PORT,
+        "transport": (
+            saved.get("transport", CONFIGURE_DEFAULT_TRANSPORT)
+            or CONFIGURE_DEFAULT_TRANSPORT
+        ),
+        "username": saved.get("username", ""),
+        "password": saved.get("password", ""),
+    }
+
+    while True:
+        values["hostname"] = _prompt_string("Hostname or IP", values["hostname"])
+        values["port"] = _prompt_port(values["port"])
+        values["username"] = _prompt_string("Username", values["username"])
+        values["password"] = _prompt_string(
+            "Password", values["password"], secret=True
+        )
+        values["transport"] = _prompt_transport(values["transport"])
+
+        try:
+            _attempt_profile_connection(values)
+        except Exception as exc:
+            err_console.print(f"[red]Connection failed:[/red] {exc}")
+            continue
+
+        path = save_profile(profile_name, values)
+        console.print(
+            f"[green]Connection successful.[/green] Saved profile '{profile_name}' to {path}"
+        )
+        return
 
 
 # ---------------------------------------------------------------------------
