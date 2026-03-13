@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import socket
 import time
 from typing import Any
@@ -18,7 +19,20 @@ from xpctl.transport.base import Transport
 DEFAULT_PORT = 9578
 DEFAULT_TIMEOUT = 10.0
 CONNECT_ATTEMPTS = 3
-TRANSIENT_CONNECT_ERRNOS = {51, 60, 64, 65}
+TRANSIENT_CONNECT_ERRNOS = {
+    value
+    for value in (
+        getattr(errno, "ECONNREFUSED", None),
+        getattr(errno, "ECONNRESET", None),
+        getattr(errno, "EHOSTDOWN", None),
+        getattr(errno, "EHOSTUNREACH", None),
+        getattr(errno, "ENETDOWN", None),
+        getattr(errno, "ENETRESET", None),
+        getattr(errno, "ENETUNREACH", None),
+        getattr(errno, "ETIMEDOUT", None),
+    )
+    if value is not None
+}
 
 __all__ = ["DEFAULT_PORT", "DEFAULT_TIMEOUT", "TCPTransport"]
 

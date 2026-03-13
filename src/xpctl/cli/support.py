@@ -274,7 +274,6 @@ def _prompt_transport(value: str) -> str:
 
 
 def _run_host_command(
-def _run_host_command(
     cmd: list[str],
     ssh_host: str = "",
     ssh_user: str = "root",

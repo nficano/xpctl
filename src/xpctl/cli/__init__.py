@@ -9,7 +9,9 @@ from click.core import ParameterSource
 
 from xpctl.client import XPClient
 from xpctl.config import DEFAULT_PROFILE, load_profile, save_profile
+from xpctl.transport.factory import TransportMode
 
+from . import support
 from .admin import register_admin_commands
 from .debug import register_debug_commands
 from .exec import register_exec_commands
