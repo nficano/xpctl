@@ -65,6 +65,11 @@ def has_origin() -> bool:
     return run("git", "remote", "get-url", "origin", check=False).returncode == 0
 
 
+def tag_exists(tag: str) -> bool:
+    """Check if a git tag already exists locally."""
+    return run("git", "rev-parse", tag, check=False).returncode == 0
+
+
 def commit_and_tag(version: str, name: str) -> None:
     tag = f"v{version}"
     message = f"Release {tag} ({name})"
@@ -72,6 +77,8 @@ def commit_and_tag(version: str, name: str) -> None:
     rel_path = os.path.relpath(VERSION_FILE, repo_root)
     run("git", "add", "--", rel_path)
     run("git", "commit", "-m", message, "--", rel_path)
+    if tag_exists(tag):
+        run("git", "tag", "-d", tag)
     run("git", "tag", "-a", tag, "-m", message)
 
 
@@ -79,7 +86,7 @@ def push_release(version: str) -> None:
     branch = git_branch()
     tag = f"v{version}"
     run("git", "push", "origin", branch)
-    run("git", "push", "origin", tag)
+    run("git", "push", "origin", tag, "--force")
 
 
 def main() -> int:
