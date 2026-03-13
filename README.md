@@ -1,5 +1,3 @@
-# xpctl
-
 <p align="center">
   <img src="winxp.png" alt="Windows XP logo" width="15%">
 </p>
