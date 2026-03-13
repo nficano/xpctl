@@ -14,7 +14,7 @@ higher-level reverse-engineering helpers in one installable project.
 - A Click-based CLI for day-to-day operations
 - A packaged Python 3.4-compatible XP agent
 - Reverse-engineering helpers for debugger, COM, memory, and GUI workflows
-- GitHub Actions for CI, docs deployment, and tagged releases to PyPI
+- GitHub Actions for CI, docs deployment, and automated releases to PyPI
 - A devcontainer for contributor onboarding
 
 ## Quick start
@@ -94,9 +94,14 @@ GitHub Pages.
 
 ## Release automation
 
-Releases are cut from annotated tags and published through GitHub Actions. The
-release workflow uses [`debaser`](https://github.com/nficano/debaser) to generate a
-deterministic human-readable release name from the Git SHA.
+Releases are published through `.github/workflows/release.yml`. That workflow
+uses [`debaser`](https://github.com/nficano/debaser) to generate a deterministic
+human-readable release name from the Git SHA.
+
+Pushes to `main` automatically cut a patch release unless the commit is already a
+generated `Release v...` commit. Manual annotated `v<version>` tags still publish
+through the same workflow, which keeps PyPI trusted publishing pinned to a
+single workflow file.
 
 Local release flow:
 
@@ -111,7 +116,7 @@ That command:
 - creates a commit and annotated `v<version>` tag
 - pushes the branch and tag when a remote is configured
 
-Tag pushes trigger the release workflow, which:
+The release workflow then:
 
 - validates the version/tag match
 - builds the wheel and source distribution

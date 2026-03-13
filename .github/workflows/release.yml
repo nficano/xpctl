@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags:
       - "v*"
 
@@ -12,6 +13,10 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    if: >
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.ref == 'refs/heads/main' &&
+      !startsWith(github.event.head_commit.message, 'Release v'))
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +44,23 @@ jobs:
           tar -xzf "$asset"
           sudo install -m 0755 "debaser-${version}-${target}/debaser" /usr/local/bin/debaser
 
+      - name: Bump version, tag, and push
+        id: bump
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          output="$(python scripts/release.py --bump patch --no-push)"
+          version="$(echo "$output" | grep '^version=' | cut -d= -f2)"
+          release_name="$(echo "$output" | grep '^release_name=' | cut -d= -f2)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release_name=$release_name" >> "$GITHUB_OUTPUT"
+          git push origin main "v${version}"
+
       - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
           set -euo pipefail
@@ -50,19 +71,28 @@ jobs:
             exit 1
           fi
 
+      - name: Derive release metadata
+        id: release_meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            tag="v${{ steps.bump.outputs.version }}"
+            name="${{ steps.bump.outputs.release_name }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+            name="$(debaser --checksum "${commit}")"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
       - name: Build distributions
         run: python -m build
 
       - name: Validate distributions
         run: twine check dist/*
-
-      - name: Generate release name
-        id: debaser
-        shell: bash
-        run: |
-          set -euo pipefail
-          name="$(debaser --checksum "${GITHUB_SHA}")"
-          echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -70,9 +100,10 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          name: "${{ github.ref_name }} (${{ steps.debaser.outputs.name }})"
+          tag_name: "${{ steps.release_meta.outputs.tag }}"
+          name: "${{ steps.release_meta.outputs.tag }} (${{ steps.release_meta.outputs.name }})"
           body: |
-            Release name: `${{ steps.debaser.outputs.name }}`
+            Release name: `${{ steps.release_meta.outputs.name }}`
 
-            This release was built from `${{ github.sha }}` and published automatically.
+            This release was built from `${{ steps.release_meta.outputs.commit }}` and published automatically.
           files: dist/*
