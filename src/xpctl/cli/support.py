@@ -100,8 +100,16 @@ def _resolve_connection_settings(
     resolved_host = host if host is not None else (saved.get("hostname") or "")
     saved_port = saved.get("port", "")
     resolved_port = (
-        port if port is not None else int(saved_port or RUNTIME_DEFAULT_PORT)
-    )
+    saved_port = saved.get("port", "")
+    if port is not None:
+        resolved_port = port
+    else:
+        try:
+            resolved_port = int(saved_port or RUNTIME_DEFAULT_PORT)
+        except ValueError as exc:
+            raise click.ClickException(
+                f"Invalid port value '{saved_port}' in profile '{profile_name}'."
+            ) from exc
     resolved_transport = (
         transport_mode
         if transport_mode is not None
