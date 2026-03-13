@@ -80,11 +80,13 @@ if not exist "%PYTHON_EXE%" (
 )
 
 echo [xpctl] Configuring sshd service
+set "SSHD_READY=0"
 "%CYGWIN_ROOT%\bin\bash.exe" --login -c "/usr/bin/ssh-host-config --yes --port 22 --privileged --user cyg_server --pwd %SSHD_PASSWORD%"
 if errorlevel 1 (
   echo [xpctl] Warning: ssh-host-config failed. Continuing with the TCP agent bootstrap.
 ) else (
   "%CYGWIN_ROOT%\bin\bash.exe" --login -c "/usr/bin/cygrunsrv -S sshd || /usr/bin/cygrunsrv -S cygsshd"
+  if not errorlevel 1 set "SSHD_READY=1"
 )
 
 echo [xpctl] Installing packaged agent...
@@ -110,7 +112,7 @@ ping -n 2 127.0.0.1 >nul
 goto wait_for_agent
 
 :agent_ready
-netsh firewall add portopening TCP 22 "Cygwin SSHD" >nul 2>&1
+if "%SSHD_READY%"=="1" netsh firewall add portopening TCP 22 "Cygwin SSHD" >nul 2>&1
 netsh firewall add portopening TCP 9578 "xpctl Agent" >nul 2>&1
 echo [xpctl] Agent is listening on port 9578.
 echo [xpctl] Cygwin and OpenSSH packages were installed under %CYGWIN_ROOT%.
