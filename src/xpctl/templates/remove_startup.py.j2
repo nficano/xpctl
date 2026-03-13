@@ -13,5 +13,7 @@ try:
         result = {'removed': True}
     finally:
         winreg.CloseKey(key)
-except OSError:
+except FileNotFoundError:
     result = {'removed': False, 'message': 'Startup entry not found'}
+except PermissionError:
+    result = {'removed': False, 'message': 'Permission denied'}

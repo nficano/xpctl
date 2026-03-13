@@ -10,6 +10,7 @@ from typing import Any
 
 from xpctl.transport.ssh_support.sftp import temporary_text_file
 from xpctl.transport.ssh_support.shell import as_exec_response
+from xpctl.transport.ssh_support.translation import quote_cmd_value
 
 BAT_HEADER = "@echo off\r\n"
 DEFAULT_BAT_TIMEOUT = 60
@@ -39,8 +40,8 @@ class BatchAPI:
         path = str(params.get("path", ""))
         args = tuple(str(arg) for arg in params.get("args", ()))
         timeout = int(params.get("timeout", DEFAULT_BAT_TIMEOUT))
-        command = subprocess.list2cmdline([path, *args])
-        return self.run_bash(f"cmd.exe /c {shlex.quote(command)}", timeout)
+        quoted_command = " ".join(quote_cmd_value(t) for t in [path, *args])
+        return self.run_bash(f"cmd.exe /c {shlex.quote(quoted_command)}", timeout)
 
     def create(self, params: Mapping[str, Any]) -> dict[str, Any]:
         """Create a remote batch file from inline commands."""

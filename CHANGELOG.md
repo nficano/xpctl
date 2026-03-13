@@ -23,3 +23,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VM snapshot helpers for Proxmox and VirtualBox.
 - GitHub Actions CI, release, and docs workflows.
 - MkDocs Material documentation site.
+
+[0.1.0]: https://github.com/nficano/xpctl/releases/tag/v0.1.0

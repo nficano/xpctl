@@ -99,7 +99,9 @@ def _resolve_connection_settings(
 
     resolved_host = host if host is not None else (saved.get("hostname") or "")
     saved_port = saved.get("port", "")
-    resolved_port = port if port is not None else int(saved_port or RUNTIME_DEFAULT_PORT)
+    resolved_port = (
+        port if port is not None else int(saved_port or RUNTIME_DEFAULT_PORT)
+    )
     resolved_transport = (
         transport_mode
         if transport_mode is not None
@@ -267,6 +269,7 @@ def _run_host_command(
     cmd: list[str],
     ssh_host: str = "",
     ssh_user: str = "root",
+    verify_host_key: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run *cmd* locally or over SSH if *ssh_host* is set."""
     if not ssh_host:
@@ -274,15 +277,15 @@ def _run_host_command(
 
     target = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
     remote_cmd = " ".join(shlex.quote(c) for c in cmd)
-    full_cmd = [
-        "ssh",
-        "-o",
-        "StrictHostKeyChecking=no",
-        "-o",
-        "UserKnownHostsFile=/dev/null",
-        target,
-        remote_cmd,
-    ]
+    full_cmd = ["ssh"]
+    if not verify_host_key:
+        full_cmd += [
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+        ]
+    full_cmd += [target, remote_cmd]
     return subprocess.run(full_cmd, capture_output=True, text=True)
 
 

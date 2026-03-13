@@ -3,4 +3,4 @@ if not exist C:\xpctl mkdir C:\xpctl
 copy /Y "{{ export_dir }}\agent.py" "C:\xpctl\agent.py"
 start "" C:\Python34\python.exe C:\xpctl\agent.py --port {{ port }}
 echo Agent started on port {{ port }}
-timeout /t 3
+timeout /t 3 >nul 2>&1 || ping -n 4 127.0.0.1 >nul

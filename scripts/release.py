@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -67,8 +68,10 @@ def has_origin() -> bool:
 def commit_and_tag(version: str, name: str) -> None:
     tag = f"v{version}"
     message = f"Release {tag} ({name})"
-    run("git", "add", str(VERSION_FILE))
-    run("git", "commit", "-m", message)
+    repo_root = Path(run("git", "rev-parse", "--show-toplevel").stdout.strip())
+    rel_path = os.path.relpath(VERSION_FILE, repo_root)
+    run("git", "add", "--", rel_path)
+    run("git", "commit", "-m", message, "--", rel_path)
     run("git", "tag", "-a", tag, "-m", message)
 
 

@@ -127,11 +127,14 @@ def register_exec_commands(main: click.Group) -> None:
     @click.pass_context
     def reg_delete(ctx, key, value_name, force, timeout):
         """Delete a registry key or value."""
+        if not force:
+            target = f"{key}\\{value_name}" if value_name else key
+            if not click.confirm(f"Delete registry entry {target}?"):
+                return
         cmd = f"reg delete {support._cmd_quote(key)}"
         if value_name:
             cmd += f" /v {support._cmd_quote(value_name)}"
-        if force:
-            cmd += " /f"
+        cmd += " /f"
         with support._client(ctx) as client:
             result = client.exec(cmd, timeout=timeout)
         support._print_exec_result(result, ctx)

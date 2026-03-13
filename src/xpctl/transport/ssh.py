@@ -255,13 +255,31 @@ class SSHTransport(Transport):
 
     def scp_push(self, local_path: str, remote_path: str, timeout: int = 120) -> None:
         """Upload a local file to the remote host via SFTP."""
-        del timeout
-        self._sftp_api.put(local_path, remote_path)
+        self._ensure_sftp()
+        assert self._sftp is not None
+        channel = self._sftp.get_channel()
+        original_timeout = channel.gettimeout() if channel else None
+        try:
+            if channel:
+                channel.settimeout(float(timeout))
+            self._sftp_api.put(local_path, remote_path)
+        finally:
+            if channel:
+                channel.settimeout(original_timeout)
 
     def scp_pull(self, remote_path: str, local_path: str, timeout: int = 120) -> None:
         """Download a file from the remote host to a local path via SFTP."""
-        del timeout
-        self._sftp_api.get(remote_path, local_path)
+        self._ensure_sftp()
+        assert self._sftp is not None
+        channel = self._sftp.get_channel()
+        original_timeout = channel.gettimeout() if channel else None
+        try:
+            if channel:
+                channel.settimeout(float(timeout))
+            self._sftp_api.get(remote_path, local_path)
+        finally:
+            if channel:
+                channel.settimeout(original_timeout)
 
     # -- internal -----------------------------------------------------------
 

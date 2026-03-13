@@ -159,5 +159,13 @@ class ShellAPI:
         force = bool(params.get("force", True))
         force_flag = "/f " if force else ""
         command = f"shutdown /r {force_flag}/t {delay}"
-        self.run_bash(f"cmd.exe /c {shlex.quote(command)}", REBOOT_TIMEOUT)
+        result = self.run_bash(f"cmd.exe /c {shlex.quote(command)}", REBOOT_TIMEOUT)
+        if result.returncode != 0:
+            return {
+                "rebooting": False,
+                "command": command,
+                "returncode": result.returncode,
+                "stderr": result.stderr,
+                "stdout": result.stdout,
+            }
         return {"rebooting": True, "command": command}

@@ -98,8 +98,10 @@ def register_admin_commands(main: click.Group) -> None:
         show_default=True,
         help="Proxmox only: include VM state.",
     )
-    def snapshot_save(vm, name, provider, proxmox_host, proxmox_user, vmstate):
+    @click.pass_context
+    def snapshot_save(ctx, vm, name, provider, proxmox_host, proxmox_user, vmstate):
         """Save VM snapshot."""
+        params = ctx.ensure_object(dict)
         if provider == "proxmox":
             cmd = ["qm", "snapshot", vm, name]
             if vmstate:
@@ -108,6 +110,7 @@ def register_admin_commands(main: click.Group) -> None:
                 cmd,
                 ssh_host=proxmox_host,
                 ssh_user=proxmox_user,
+                verify_host_key=params.get("verify_host_key", True),
             )
             if result.returncode != 0:
                 raise click.ClickException(
@@ -120,11 +123,19 @@ def register_admin_commands(main: click.Group) -> None:
             )
             return
 
-        result = subprocess.run(
-            ["VBoxManage", "snapshot", vm, "take", name],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["VBoxManage", "snapshot", vm, "take", name],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except OSError as exc:
+            raise click.ClickException(f"Failed to run VBoxManage: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise click.ClickException(
+                f"VBoxManage snapshot save timed out: {exc}"
+            ) from exc
         if result.returncode != 0:
             raise click.ClickException(result.stderr.strip() or "snapshot save failed")
         support.console.print(f"[green]Snapshot saved:[/green] {vm}:{name}")
@@ -148,8 +159,10 @@ def register_admin_commands(main: click.Group) -> None:
         show_default=True,
         help="Proxmox only: start VM after rollback.",
     )
-    def snapshot_restore(vm, name, provider, proxmox_host, proxmox_user, start):
+    @click.pass_context
+    def snapshot_restore(ctx, vm, name, provider, proxmox_host, proxmox_user, start):
         """Restore VM snapshot."""
+        params = ctx.ensure_object(dict)
         if provider == "proxmox":
             cmd = ["qm", "rollback", vm, name]
             if start:
@@ -158,6 +171,7 @@ def register_admin_commands(main: click.Group) -> None:
                 cmd,
                 ssh_host=proxmox_host,
                 ssh_user=proxmox_user,
+                verify_host_key=params.get("verify_host_key", True),
             )
             if result.returncode != 0:
                 raise click.ClickException(
@@ -170,11 +184,19 @@ def register_admin_commands(main: click.Group) -> None:
             )
             return
 
-        result = subprocess.run(
-            ["VBoxManage", "snapshot", vm, "restore", name],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["VBoxManage", "snapshot", vm, "restore", name],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except OSError as exc:
+            raise click.ClickException(f"Failed to run VBoxManage: {exc}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise click.ClickException(
+                f"VBoxManage snapshot restore timed out: {exc}"
+            ) from exc
         if result.returncode != 0:
             raise click.ClickException(
                 result.stderr.strip() or "snapshot restore failed"
