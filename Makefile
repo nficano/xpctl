@@ -1,9 +1,11 @@
-PYTHON ?= .venv/bin/python
-PIP ?= .venv/bin/pip
-PYTEST ?= .venv/bin/pytest
-RUFF ?= .venv/bin/ruff
-PYRIGHT ?= .venv/bin/pyright
-MKDOCS ?= .venv/bin/mkdocs
+VENV_BIN := .venv/bin
+PYTHON ?= $(if $(wildcard $(VENV_BIN)/python),$(VENV_BIN)/python,python3)
+PIP ?= $(PYTHON) -m pip
+PYTEST ?= $(PYTHON) -m pytest
+RUFF ?= $(PYTHON) -m ruff
+PYRIGHT ?= $(PYTHON) -m pyright
+MKDOCS ?= $(PYTHON) -m mkdocs
+PRE_COMMIT ?= $(PYTHON) -m pre_commit
 BUMP ?= patch
 VERSION ?=
 
@@ -11,7 +13,7 @@ VERSION ?=
 
 install:
 	$(PIP) install -e ".[dev,docs]"
-	.venv/bin/pre-commit install
+	$(PRE_COMMIT) install
 
 format:
 	$(RUFF) check --fix .
