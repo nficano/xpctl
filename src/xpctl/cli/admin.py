@@ -257,6 +257,42 @@ def register_admin_commands(main: click.Group) -> None:
             f"[green]Installed {info['description']} to {data.get('path', remote_dir)}[/green]"
         )
 
+    @setup.command("bootstrap")
+    @click.option(
+        "--output-dir",
+        type=click.Path(file_okay=False, path_type=Path),
+        default=Path("artifacts/xp-bootstrap"),
+        show_default=True,
+        help="Local directory to populate with the XP bootstrap bundle.",
+    )
+    def setup_bootstrap(output_dir: Path):
+        """Generate a self-contained XP bootstrap bundle."""
+        import xpctl.cli as cli_module
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        python_archive = "python-3.4.10.zip"
+        cygwin_setup = "setup-x86-2.874.exe"
+
+        try:
+            cli_module.copy_installer_asset(python_archive, output_dir / python_archive)
+            cli_module.copy_installer_asset(cygwin_setup, output_dir / cygwin_setup)
+        except (FileNotFoundError, ModuleNotFoundError) as exc:
+            raise click.ClickException(
+                f"Required bootstrap asset is missing: {exc}"
+            ) from exc
+
+        cli_module.write_agent_source(output_dir / "agent.py")
+        cli_module.write_bootstrap_batch(output_dir / "bootstrap_xpctl.bat")
+
+        support.console.print(
+            f"[green]XP bootstrap bundle created:[/green] {output_dir}"
+        )
+        support.console.print("  - bootstrap_xpctl.bat")
+        support.console.print(f"  - {python_archive}")
+        support.console.print(f"  - {cygwin_setup}")
+        support.console.print("  - agent.py")
+
     @main.group()
     def agent():
         """Agent lifecycle management."""

@@ -335,7 +335,7 @@ def main(ctx, profile, host, port, transport_mode, password, user, verify_host_k
     ctx.ensure_object(dict).update(resolved)
     if (
         ctx.invoked_subcommand
-        and ctx.invoked_subcommand != "configure"
+        and ctx.invoked_subcommand not in {"configure", "setup"}
         and not resolved["host"]
     ):
         raise click.UsageError(

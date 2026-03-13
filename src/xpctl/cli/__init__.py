@@ -9,6 +9,15 @@ from click.core import ParameterSource
 
 from xpctl.client import XPClient
 from xpctl.config import DEFAULT_PROFILE, load_profile, save_profile
+from xpctl.resources import (
+    copy_installer_asset as copy_installer_asset,
+)
+from xpctl.resources import (
+    write_agent_source as write_agent_source,
+)
+from xpctl.resources import (
+    write_bootstrap_batch as write_bootstrap_batch,
+)
 from xpctl.transport.factory import TransportMode
 
 from . import support
@@ -42,7 +51,7 @@ def main(ctx, profile, host, port, transport_mode, password, user, verify_host_k
     ctx.ensure_object(dict).update(resolved)
     if (
         ctx.invoked_subcommand
-        and ctx.invoked_subcommand != "configure"
+        and ctx.invoked_subcommand not in {"configure", "setup"}
         and not resolved["host"]
     ):
         raise click.UsageError(
