@@ -56,7 +56,7 @@ def test_configure_retries_until_connection_succeeds(tmp_path, monkeypatch):
     result = runner.invoke(
         main,
         ["configure", "--profile", "lab"],
-        input=("172.16.20.173\n22\nDONALD TRUMP\nwrongpass\nauto\n\n\n\nmywinxp!\n\n"),
+        input=("172.16.20.173\n22\nuser\nwrongpass\nauto\n\n\n\nmywinxp!\n\n"),
     )
 
     assert result.exit_code == 0
@@ -68,7 +68,7 @@ def test_configure_retries_until_connection_succeeds(tmp_path, monkeypatch):
         "hostname": "172.16.20.173",
         "port": "22",
         "transport": "auto",
-        "username": "DONALD TRUMP",
+        "username": "user",
         "password": "mywinxp!",
     }
 
@@ -83,7 +83,7 @@ def test_configure_prefills_existing_password_and_ping_uses_named_profile(
             "hostname": "172.16.20.173",
             "port": 22,
             "transport": "ssh",
-            "username": "DONALD TRUMP",
+            "username": "user",
             "password": "mywinxp!",
         },
     )
@@ -127,6 +127,6 @@ def test_configure_prefills_existing_password_and_ping_uses_named_profile(
         "host": "172.16.20.173",
         "port": 22,
         "transport": "ssh",
-        "user": "DONALD TRUMP",
+        "user": "user",
         "password": "mywinxp!",
     }

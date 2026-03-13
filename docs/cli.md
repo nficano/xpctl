@@ -18,7 +18,7 @@ Profiles are stored in `~/.xpcli/config` using a simple INI format:
 hostname = 172.16.20.173
 port = 22
 transport = auto
-username = DONALD TRUMP
+username = user
 password = mywinxp!
 
 [lab]
