@@ -1,8 +1,7 @@
 import os, shutil
-src = r'{{ export_source }}'
-dst_dir = r'{{ remote_agent_dir }}'
-dst = r'{{ remote_agent_path }}'
-if not os.path.isdir(dst_dir):
-    os.makedirs(dst_dir)
+src = {{ export_source | tojson }}
+dst_dir = {{ remote_agent_dir | tojson }}
+dst = {{ remote_agent_path | tojson }}
+os.makedirs(dst_dir, exist_ok=True)
 shutil.copy2(src, dst)
 print('Installed agent to ' + dst)

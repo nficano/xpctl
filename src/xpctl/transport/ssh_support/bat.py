@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shlex
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -41,7 +40,7 @@ class BatchAPI:
         args = tuple(str(arg) for arg in params.get("args", ()))
         timeout = int(params.get("timeout", DEFAULT_BAT_TIMEOUT))
         quoted_command = " ".join(quote_cmd_value(t) for t in [path, *args])
-        return self.run_bash(f"cmd.exe /c {shlex.quote(quoted_command)}", timeout)
+        return self.run_bash(f"cmd.exe /c {quoted_command}", timeout)
 
     def create(self, params: Mapping[str, Any]) -> dict[str, Any]:
         """Create a remote batch file from inline commands."""

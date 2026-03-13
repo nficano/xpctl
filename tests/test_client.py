@@ -80,6 +80,42 @@ def test_client_connect_is_idempotent():
     assert len(factory.calls) == 1
 
 
+def test_client_connect_does_not_cache_failed_transport():
+    class FailingTransport(_FakeTransport):
+        def connect(self):
+            raise ConnectionError("boom")
+
+    class FakeFactory:
+        def __init__(self):
+            self.calls = []
+            self._attempt = 0
+
+        def create(self, mode, profile):
+            self.calls.append((mode, profile))
+            self._attempt += 1
+            if self._attempt == 1:
+                return FailingTransport()
+            return _FakeTransport()
+
+    factory = FakeFactory()
+    client = XPClient(transport_factory=factory)
+
+    try:
+        client.connect()
+    except ConnectionError as exc:
+        assert str(exc) == "boom"
+    else:
+        raise AssertionError("Expected first connect() attempt to fail")
+
+    assert client._transport is None
+
+    client.connect()
+
+    assert len(factory.calls) == 2
+    assert client._transport is not None
+    assert client._transport.is_connected() is True
+
+
 def test_client_reboot_wait_requires_tcp_agent_recovery():
     class FakeSocket:
         def __init__(self, *args):
@@ -138,6 +174,66 @@ def test_client_reboot_wait_requires_tcp_agent_recovery():
         "tcp-probe",
         ConnectionProfile(timeout=1.0, probe_timeout=1.0),
     )
+
+
+def test_client_reboot_reconnects_before_returning_success():
+    class FakeSocket:
+        def __init__(self, *args):
+            del args
+
+        def settimeout(self, timeout):
+            del timeout
+
+        def connect(self, address):
+            del address
+            raise OSError("host is down")
+
+        def close(self):
+            return None
+
+    class RebootTransport(_FakeTransport):
+        def send_request(self, action, params=None):
+            self.requests.append((action, params))
+            if action == "reboot":
+                return {"rebooting": True}
+            return super().send_request(action, params)
+
+    class ReconnectedTransport(_FakeTransport):
+        pass
+
+    class FakeFactory:
+        def __init__(self):
+            self.calls = []
+            self._connect_attempts = 0
+
+        def create(self, mode, profile):
+            self.calls.append((mode, profile))
+            self._connect_attempts += 1
+            if self._connect_attempts == 1:
+                return RebootTransport()
+            return ReconnectedTransport()
+
+        def create_tcp(self, profile):
+            self.calls.append(("tcp-probe", profile))
+            probe = _FakeTransport()
+            probe.send_request = lambda action, params=None: {"pong": action == "ping"}
+            return probe
+
+    moments = iter([0.0, 0.0, 30.0, 30.0, 31.0])
+    factory = FakeFactory()
+    client = XPClient(
+        transport="auto",
+        transport_factory=factory,
+        sleep=lambda _: None,
+        monotonic=lambda: next(moments),
+        socket_factory=FakeSocket,
+    )
+    client.connect()
+
+    assert client.reboot(wait=True, timeout=5.0, poll_interval=1.0) is True
+    assert client._transport is not None
+    assert client._transport.is_connected() is True
+    assert factory.calls[-1][0] == "auto"
 
 
 def test_client_push_and_run_quotes_remote_dir(tmp_path: Path):

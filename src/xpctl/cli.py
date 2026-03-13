@@ -1821,7 +1821,7 @@ def agent():
 def deploy(ctx):
     """Push the agent to XP via SCP."""
     p = ctx.ensure_object(dict)
-    ssh = SSHTransport(p["host"], p["user"], p["password"])
+    ssh = SSHTransport(p["host"], p["user"], p["password"], port=p.get("port", 22))
     deployer = AgentDeployer(ssh)
     deployer.deploy()
     console.print("[green]Agent deployed successfully.[/green]")
@@ -1832,7 +1832,7 @@ def deploy(ctx):
 def start(ctx):
     """Start the agent on XP."""
     p = ctx.ensure_object(dict)
-    ssh = SSHTransport(p["host"], p["user"], p["password"])
+    ssh = SSHTransport(p["host"], p["user"], p["password"], port=p.get("port", 22))
     deployer = AgentDeployer(ssh)
     deployer.start(p["port"])
     console.print(f"[green]Agent started on port {p['port']}.[/green]")
@@ -1843,7 +1843,7 @@ def start(ctx):
 def stop(ctx):
     """Stop the agent on XP."""
     p = ctx.ensure_object(dict)
-    ssh = SSHTransport(p["host"], p["user"], p["password"])
+    ssh = SSHTransport(p["host"], p["user"], p["password"], port=p.get("port", 22))
     deployer = AgentDeployer(ssh)
     deployer.stop()
     console.print("[green]Agent stopped.[/green]")
@@ -1854,7 +1854,7 @@ def stop(ctx):
 def status(ctx):
     """Check agent status."""
     p = ctx.ensure_object(dict)
-    ssh = SSHTransport(p["host"], p["user"], p["password"])
+    ssh = SSHTransport(p["host"], p["user"], p["password"], port=p.get("port", 22))
     deployer = AgentDeployer(ssh)
     s = deployer.status(p["port"])
 
@@ -1875,7 +1875,7 @@ def status(ctx):
 def redeploy(ctx):
     """Stop, deploy, and restart the agent."""
     p = ctx.ensure_object(dict)
-    ssh = SSHTransport(p["host"], p["user"], p["password"])
+    ssh = SSHTransport(p["host"], p["user"], p["password"], port=p.get("port", 22))
     deployer = AgentDeployer(ssh)
     deployer.redeploy(p["port"])
     console.print("[green]Agent redeployed and started.[/green]")
@@ -1886,7 +1886,7 @@ def redeploy(ctx):
 def install(ctx):
     """Full install: deploy, start, and register for boot startup."""
     p = ctx.ensure_object(dict)
-    ssh = SSHTransport(p["host"], p["user"], p["password"])
+    ssh = SSHTransport(p["host"], p["user"], p["password"], port=p.get("port", 22))
     deployer = AgentDeployer(ssh)
     deployer.install(p["port"])
     console.print("[green]Agent installed and registered for startup.[/green]")
@@ -1897,7 +1897,7 @@ def install(ctx):
 def uninstall(ctx):
     """Remove startup entry, stop agent, and clean up files."""
     p = ctx.ensure_object(dict)
-    ssh = SSHTransport(p["host"], p["user"], p["password"])
+    ssh = SSHTransport(p["host"], p["user"], p["password"], port=p.get("port", 22))
     deployer = AgentDeployer(ssh)
     deployer.uninstall(p["port"])
     console.print("[green]Agent uninstalled.[/green]")

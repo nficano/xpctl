@@ -157,9 +157,13 @@ def register_debug_commands(main: click.Group) -> None:
         """Analyze a crash dump with CDB."""
         with support._client(ctx) as client:
             support._require_tcp_agent(client, "Debugger commands")
-            sid = client.debug.windbg.launch(dump_path)
-            output = client.debug.windbg.cmd(sid, "!analyze -v")
-            client.debug.windbg.detach(sid)
+            sid = None
+            try:
+                sid = client.debug.windbg.launch(dump_path)
+                output = client.debug.windbg.cmd(sid, "!analyze -v")
+            finally:
+                if sid is not None:
+                    client.debug.windbg.detach(sid)
         support.console.print(output, highlight=False)
 
     @windbg.command("detach")

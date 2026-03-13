@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jinja2 import Environment, PackageLoader, select_autoescape
+from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
 __all__ = ["render"]
 
@@ -10,6 +10,7 @@ _env = Environment(
     loader=PackageLoader("xpctl", "templates"),
     autoescape=select_autoescape([]),
     keep_trailing_newline=True,
+    undefined=StrictUndefined,
 )
 
 

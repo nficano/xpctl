@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import os
+import shlex
+import subprocess
 import time
 from pathlib import Path
 
 import click
 
 from . import support
+
+
+def _stringify_argv(argv: tuple[str, ...]) -> str:
+    """Rebuild argv into a shell-safe command string without losing boundaries."""
+    if os.name == "nt":
+        return subprocess.list2cmdline(list(argv))
+    return shlex.join(argv)
 
 
 def register_exec_commands(main: click.Group) -> None:
@@ -18,7 +28,7 @@ def register_exec_commands(main: click.Group) -> None:
     @click.pass_context
     def exec_cmd(ctx, cmd, timeout, use_python):
         """Execute a remote command."""
-        cmd_str = " ".join(cmd)
+        cmd_str = _stringify_argv(cmd)
         with support._client(ctx) as client:
             if use_python:
                 result = client.exec_python(cmd_str, timeout)
@@ -238,7 +248,7 @@ def register_exec_commands(main: click.Group) -> None:
     @click.pass_context
     def watch_cmd(ctx, cmd, interval, count, timeout):
         """Repeat a command at an interval."""
-        cmd_str = " ".join(cmd)
+        cmd_str = _stringify_argv(cmd)
         runs = 0
         try:
             with support._client(ctx) as client:

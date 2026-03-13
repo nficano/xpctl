@@ -51,6 +51,7 @@ def _agent_deployer(ctx: click.Context) -> AgentDeployer:
         params["user"],
         params["password"],
         verify_host_key=params["verify_host_key"],
+        port=params.get("port", 22),
     )
     return AgentDeployer(ssh=ssh)
 
@@ -368,9 +369,34 @@ def register_admin_commands(main: click.Group) -> None:
         with support._client(ctx) as client:
             if not wait:
                 try:
-                    client._request("reboot", {"delay": 0, "force": True})
-                except (ConnectionError, BrokenPipeError, OSError):
-                    pass
+                    resp = client._request("reboot", {"delay": 0, "force": True})
+                except (ConnectionError, BrokenPipeError, OSError) as exc:
+                    support.err_console.print(
+                        f"[red]Failed to initiate reboot:[/red] {exc}"
+                    )
+                    ctx.exit(1)
+                    return
+                status = str(resp.get("status", "ok")).lower()
+                rebooting = bool(resp.get("rebooting"))
+                failed = (
+                    status != "ok"
+                    or bool(resp.get("error"))
+                    or resp.get("returncode", 0) not in (0, None)
+                    or not rebooting
+                )
+                if failed:
+                    detail = (
+                        str(resp.get("message") or "").strip()
+                        or str(resp.get("error") or "").strip()
+                        or str(resp.get("stderr") or "").strip()
+                        or str(resp.get("stdout") or "").strip()
+                        or "Unknown reboot failure"
+                    )
+                    support.err_console.print(
+                        f"[red]Failed to initiate reboot:[/red] {detail}"
+                    )
+                    ctx.exit(1)
+                    return
                 support.console.print("[green]Reboot initiated (not waiting).[/green]")
                 return
 

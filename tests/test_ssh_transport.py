@@ -6,6 +6,7 @@ import paramiko
 import pytest
 
 from xpctl.transport.ssh import SSHTransport
+from xpctl.transport.ssh_support.translation import PathTranslator
 
 
 def test_startup_actions_are_supported_in_ssh_mode(monkeypatch):
@@ -155,3 +156,12 @@ def test_connect_allows_opt_in_insecure_host_key_policy(monkeypatch):
     transport.connect()
 
     assert type(captured["policy"]).__name__ == "AutoAddPolicy"
+
+
+def test_path_translator_preserves_unc_prefix():
+    translator = PathTranslator()
+
+    assert (
+        translator.to_cygwin_path(r"\\server\share\file.txt")
+        == "//server/share/file.txt"
+    )

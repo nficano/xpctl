@@ -46,7 +46,7 @@ make typecheck
 
 1. Fork the repo and create a feature branch from `main`.
 2. Make your changes and add tests if applicable.
-3. Run `make lint && make test` to verify.
+3. Run `make lint && make typecheck && make test` to verify.
 4. Open a PR against `main` with a clear description of the change.
 
 ## Release process

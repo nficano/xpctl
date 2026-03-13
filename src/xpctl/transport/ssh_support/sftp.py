@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import shlex
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
@@ -101,7 +102,10 @@ class SFTPAPI:
         if mode != "write":
             raise NotImplementedError("Only mode='write' is supported in SSH mode")
 
-        raw = base64.b64decode(params.get("data", ""))
+        try:
+            raw = base64.b64decode(params.get("data", ""))
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError(f"Invalid base64 upload data: {exc}") from exc
         self.ensure_remote_parent(path)
         with temporary_binary_file(raw) as local_tmp:
             self.put(str(local_tmp), path)

@@ -99,8 +99,6 @@ def _resolve_connection_settings(
 
     resolved_host = host if host is not None else (saved.get("hostname") or "")
     saved_port = saved.get("port", "")
-    resolved_port = (
-    saved_port = saved.get("port", "")
     if port is not None:
         resolved_port = port
     else:
@@ -279,10 +277,27 @@ def _run_host_command(
     ssh_user: str = "root",
     *,
     verify_host_key: bool = True,
+    timeout: int = 30,
 ) -> subprocess.CompletedProcess[str]:
     """Run *cmd* locally or over SSH if *ssh_host* is set."""
+
+    def _exception_result(
+        exc: OSError | subprocess.TimeoutExpired,
+        args: list[str],
+    ) -> subprocess.CompletedProcess[str]:
+        returncode = 124 if isinstance(exc, subprocess.TimeoutExpired) else 1
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=returncode,
+            stdout="",
+            stderr=str(exc),
+        )
+
     if not ssh_host:
-        return subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return _exception_result(exc, cmd)
 
     target = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
     remote_cmd = " ".join(shlex.quote(c) for c in cmd)
@@ -295,7 +310,15 @@ def _run_host_command(
             "UserKnownHostsFile=/dev/null",
         ]
     full_cmd += [target, remote_cmd]
-    return subprocess.run(full_cmd, capture_output=True, text=True)
+    try:
+        return subprocess.run(
+            full_cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return _exception_result(exc, full_cmd)
 
 
 def _require_tcp_agent(client: XPClient, feature: str) -> None:

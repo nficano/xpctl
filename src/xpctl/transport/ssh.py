@@ -71,8 +71,10 @@ class SSHTransport(Transport):
         verify_host_key: bool = True,
         python_path: str = r"C:\Python34\python.exe",
         bash_path: str = "bash",
+        port: int = 22,
     ):
         self.host = host
+        self.port = port
         self.user = user
         self.password = password
         self.verify_host_key = verify_host_key
@@ -115,6 +117,7 @@ class SSHTransport(Transport):
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         connect_args: dict[str, Any] = {
             "hostname": self.host,
+            "port": self.port,
             "timeout": CONNECT_TIMEOUT,
             "banner_timeout": CONNECT_TIMEOUT,
             "auth_timeout": AUTH_TIMEOUT,

@@ -23,6 +23,11 @@ def _windows_drive_prefix(path: PureWindowsPath) -> str:
 
 def _posix_path(path: str) -> str:
     normalized = path.replace("\\", "/")
+    if normalized.startswith("//"):
+        remainder = normalized[2:]
+        while "//" in remainder:
+            remainder = remainder.replace("//", "/")
+        return f"//{remainder}"
     while "//" in normalized:
         normalized = normalized.replace("//", "/")
     return normalized

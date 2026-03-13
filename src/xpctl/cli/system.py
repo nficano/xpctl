@@ -101,6 +101,8 @@ def register_system_commands(main: click.Group) -> None:
             "-N",
             "-L",
             f"{local_port}:{remote_host}:{remote_port}",
+            # Intentionally skip host key verification for ad-hoc tunnels into
+            # ephemeral XP targets where usability outweighs TOFU prompts.
             "-o",
             "StrictHostKeyChecking=no",
             "-o",

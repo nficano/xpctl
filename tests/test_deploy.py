@@ -89,6 +89,56 @@ def test_stop_raises_when_ssh_connection_fails(monkeypatch):
         deployer.stop(port=4321)
 
 
+def test_stop_is_idempotent_when_agent_is_already_gone(monkeypatch):
+    tcp_calls = []
+    ssh_calls = []
+
+    class FakeTCP:
+        def __init__(self, host, port=9578, timeout=10.0):
+            tcp_calls.append((host, port, timeout))
+
+        def connect(self):
+            raise RuntimeError("tcp unavailable")
+
+        def disconnect(self):
+            return None
+
+    class FakeSSH:
+        host = "xp.example"
+
+        def __init__(self):
+            self.connected = False
+
+        def is_connected(self):
+            return self.connected
+
+        def connect(self):
+            self.connected = True
+
+        def run_command(self, cmd, timeout=30):
+            ssh_calls.append((cmd, timeout))
+            return _Result(stdout="")
+
+    monkeypatch.setattr(deploy, "TCPTransport", FakeTCP)
+
+    deployer = deploy.AgentDeployer(ssh=FakeSSH())
+    deployer.stop(port=4321)
+
+    assert tcp_calls == [("xp.example", 4321, 5.0)]
+    assert ssh_calls == [
+        (
+            "cmd.exe /c wmic process where \"name='python.exe' and "
+            "(CommandLine like '%C:\\xpctl\\agent.py%' or "
+            "CommandLine like '%C:/xpctl/agent.py%') and "
+            "(CommandLine like '%--port 4321 %' or "
+            "CommandLine like '%--port 4321\"%' or "
+            "CommandLine like '%--port 4321''%' or "
+            "CommandLine like '%--port 4321')\" get ProcessId /value",
+            30,
+        )
+    ]
+
+
 def test_deploy_smb_only_writes_port_aware_scripts(tmp_path: Path):
     deployer = deploy.AgentDeployer(ssh=object(), smb_mount=tmp_path)
     deployer.deploy_smb_only(port=4444)
@@ -106,4 +156,7 @@ def test_wmic_agent_where_clause_matches_both_windows_path_styles():
 
     assert r"CommandLine like '%C:\xpctl\agent.py%'" in clause
     assert "CommandLine like '%C:/xpctl/agent.py%'" in clause
-    assert "--port 4444" in clause
+    assert "CommandLine like '%--port 4444 %'" in clause
+    assert "CommandLine like '%--port 4444\"%'" in clause
+    assert "CommandLine like '%--port 4444''%'" in clause
+    assert "CommandLine like '%--port 4444'" in clause

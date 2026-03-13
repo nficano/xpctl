@@ -1,6 +1,6 @@
 import winreg
-key_path = r'{{ reg_key }}'
-value_name = r'{{ reg_name }}'
+key_path = {{ reg_key | tojson }}
+value_name = {{ reg_name | tojson }}
 try:
     key = winreg.OpenKey(
         winreg.HKEY_LOCAL_MACHINE,

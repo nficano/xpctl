@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 
 import click
 from rich.table import Table
@@ -10,6 +11,8 @@ from rich.table import Table
 from xpctl.resources import read_remote_script
 
 from . import support
+
+logger = logging.getLogger(__name__)
 
 
 def register_reverse_commands(main: click.Group) -> None:
@@ -168,8 +171,13 @@ def register_reverse_commands(main: click.Group) -> None:
         table.add_column("Class", style="green")
         table.add_column("Title")
         for window in data.get("windows", []):
+            hwnd_text = "<invalid>"
+            try:
+                hwnd_text = hex(int(window.get("hwnd")))
+            except (TypeError, ValueError):
+                logger.warning("Invalid window handle in gui_window_list: %r", window)
             table.add_row(
-                hex(int(window["hwnd"])),
+                hwnd_text,
                 window.get("class", ""),
                 window.get("title", ""),
             )

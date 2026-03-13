@@ -88,4 +88,5 @@ class DefaultTransportFactory(TransportFactory):
             profile.user,
             profile.password,
             verify_host_key=profile.verify_host_key,
+            port=profile.port,
         )

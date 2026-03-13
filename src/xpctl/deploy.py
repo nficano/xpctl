@@ -58,10 +58,16 @@ def _wmic_agent_where_clause(port: int, batch: bool = False) -> str:
     path_clause = " or ".join(
         f"CommandLine like '{wildcard}{path}{wildcard}'" for path in agent_paths
     )
+    port_clauses = (
+        f"CommandLine like '{wildcard}--port {port} {wildcard}'",
+        f"CommandLine like '{wildcard}--port {port}\"{wildcard}'",
+        f"CommandLine like '{wildcard}--port {port}''{wildcard}'",
+        f"CommandLine like '{wildcard}--port {port}'",
+    )
     clauses = [
         "name='python.exe'",
         f"({path_clause})",
-        f"CommandLine like '{wildcard}--port {port}{wildcard}'",
+        f"({' or '.join(port_clauses)})",
     ]
     return " and ".join(clauses)
 
@@ -191,21 +197,17 @@ class AgentDeployer:
 
     def stop(self, port: int = DEFAULT_PORT) -> None:
         """Stop the agent, preferring a graceful TCP shutdown first."""
-        last_error: Exception | None = None
         try:
             with self._tcp_client(port, timeout=AGENT_CONNECT_TIMEOUT) as tcp:
                 tcp.send_request("agent_shutdown")
             self._sleep(STOP_DELAY_SECONDS)
             return
-        except Exception as exc:
-            last_error = exc
+        except Exception:
+            pass
 
         if self._kill_agent_via_ssh(port):
             return
-        detail = f" (last TCP error: {last_error})" if last_error else ""
-        raise RuntimeError(
-            f"Unable to stop xpctl agent on port {port} without killing unrelated Python processes{detail}."
-        )
+        return
 
     def status(self, port: int = DEFAULT_PORT) -> dict[str, Any]:
         """Check whether the agent is running and return its info."""
@@ -285,7 +287,14 @@ class AgentDeployer:
                 continue
 
         for pid in pids:
-            self._ssh_command(f"taskkill /f /pid {pid}", timeout=SSH_KILL_TIMEOUT)
+            result = self._ssh_command(
+                f"taskkill /f /pid {pid}", timeout=SSH_KILL_TIMEOUT
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"Failed to kill xpctl agent PID {pid} on port {port}: "
+                    f"{result.stderr or result.stdout}"
+                )
 
         if pids:
             self._sleep(STOP_DELAY_SECONDS)

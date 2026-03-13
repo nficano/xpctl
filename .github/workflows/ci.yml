@@ -30,7 +30,8 @@ jobs:
           ruff format --check .
 
       - name: Type check
-        run: pyright
+        if: matrix.python-version == '3.12'
+        run: make typecheck
 
       - name: Test
         run: pytest

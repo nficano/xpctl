@@ -149,11 +149,12 @@ class XPClient:
         """Establish a connection to the remote agent."""
         if self._transport is not None:
             return
-        self._transport = self._transport_factory.create(
+        transport = self._transport_factory.create(
             self._transport_mode,
             self._connection_profile(),
         )
-        self._transport.connect()
+        transport.connect()
+        self._transport = transport
 
     def disconnect(self) -> None:
         """Disconnect from the remote agent."""
@@ -399,6 +400,7 @@ class XPClient:
                     0.1, min(self.timeout, poll_interval or self.timeout, 5.0)
                 )
                 if self._tcp_ping_once(probe_timeout):
+                    self.connect()
                     return True
             except Exception:
                 pass

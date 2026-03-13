@@ -122,7 +122,3 @@ register_exec_commands(main)
 register_file_commands(main)
 register_reverse_commands(main)
 register_system_commands(main)
-
-
-if __name__ == "__main__":
-    main()

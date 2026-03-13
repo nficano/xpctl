@@ -39,12 +39,12 @@ def register_file_commands(main: click.Group) -> None:
     @click.option(
         "--remote-dir",
         default="",
-        help="Remote destination directory (default: XP user's Desktop).",
+        help=r"Remote destination directory (default: C:\xpctl\downloads).",
     )
     @click.option("--timeout", default=120, type=int, show_default=True)
     @click.pass_context
     def fetch_exe(ctx, url, name, remote_dir, timeout):
-        """Download an EXE URL locally and upload it to the XP Desktop."""
+        """Download an EXE URL locally and upload it to XP."""
         filename = name or support._exe_filename_from_url(url)
         destination_dir = remote_dir or support._default_remote_download_dir()
         destination_root = destination_dir.rstrip("\\/")

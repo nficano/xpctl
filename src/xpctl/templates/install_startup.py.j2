@@ -1,7 +1,7 @@
 import winreg
-key_path = r'{{ reg_key }}'
-value_name = r'{{ reg_name }}'
-command = '{{ command }}'
+key_path = {{ reg_key_repr }}
+value_name = {{ reg_name_repr }}
+command = {{ command_repr }}
 key = winreg.OpenKey(
     winreg.HKEY_LOCAL_MACHINE,
     key_path,

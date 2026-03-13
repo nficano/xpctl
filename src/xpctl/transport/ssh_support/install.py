@@ -38,25 +38,28 @@ class InstallAPI:
     def install_startup(self, params: Mapping[str, Any]) -> dict[str, Any]:
         """Register the agent to start on boot."""
         port = int(params.get("port", DEFAULT_PORT))
+        command = self.translator.startup_command(port)
         return self._run_template(
             "install_startup.py.j2",
-            reg_key=STARTUP_REG_KEY,
-            reg_name=STARTUP_REG_NAME,
-            command=self.translator.startup_command(port),
+            reg_key_repr=repr(STARTUP_REG_KEY),
+            reg_name_repr=repr(STARTUP_REG_NAME),
+            command_repr=repr(command),
         )
 
-    def remove_startup(self, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    def remove_startup(
+        self, _params: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Remove the agent startup registration."""
-        del params
         return self._run_template(
             "remove_startup.py.j2",
             reg_key=STARTUP_REG_KEY,
             reg_name=STARTUP_REG_NAME,
         )
 
-    def startup_status(self, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    def startup_status(
+        self, _params: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Return the current agent startup registration status."""
-        del params
         return self._run_template(
             "startup_status.py.j2",
             reg_key=STARTUP_REG_KEY,
