@@ -56,20 +56,7 @@ def test_configure_retries_until_connection_succeeds(tmp_path, monkeypatch):
     result = runner.invoke(
         main,
         ["configure", "--profile", "lab"],
-        input=(
-            "\n"
-            "172.16.20.173\n"
-            "22\n"
-            "DONALD TRUMP\n"
-            "wrongpass\n"
-            "auto\n"
-            "\n"
-            "\n"
-            "\n"
-            "\n"
-            "mywinxp!\n"
-            "\n"
-        ),
+        input=("172.16.20.173\n22\nDONALD TRUMP\nwrongpass\nauto\n\n\n\nmywinxp!\n\n"),
     )
 
     assert result.exit_code == 0
@@ -129,12 +116,11 @@ def test_configure_prefills_existing_password_and_ping_uses_named_profile(
     configure_result = runner.invoke(
         main,
         ["configure", "--profile", "lab"],
-        input="\n\n\n\n\n\n",
+        input="\n\n\n\n\n",
     )
     ping_result = runner.invoke(main, ["--profile", "lab", "ping"])
 
     assert configure_result.exit_code == 0
-    assert "Profile name [lab]" in configure_result.output
     assert "Password [****]" in configure_result.output
     assert ping_result.exit_code == 0
     assert seen == {
