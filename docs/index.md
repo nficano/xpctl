@@ -4,6 +4,12 @@
 bundled TCP agent. It is aimed at lab environments, reverse-engineering workflows,
 and repeatable VM management.
 
+## Installation
+
+```bash
+pip install xpctl
+```
+
 ## Core capabilities
 
 - interactive profile configuration with live connection validation

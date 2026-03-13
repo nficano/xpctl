@@ -1,5 +1,11 @@
 # Getting Started
 
+## Installation
+
+```bash
+pip install xpctl
+```
+
 ## Local development install
 
 ```bash
@@ -65,11 +71,31 @@ xpctl setup bootstrap
 
 That writes `artifacts/xp-bootstrap/` with the batch file, the packaged agent,
 the pinned Python 3.4.10 archive, and the pinned Cygwin setup executable. Copy
-that folder to the guest and run `bootstrap_xpctl.bat` as an administrator.
+that folder to the guest (e.g. via a shared folder, USB drive, or ISO) and run
+`bootstrap_xpctl.bat` as an administrator:
 
-The batch installs Python 3.4.10, installs Cygwin plus OpenSSH from the pinned
-HTTP mirror, attempts to configure `sshd`, starts the packaged agent on port
-`9578`, and waits for the listener before exiting.
+```bat
+cd D:\xp-bootstrap
+bootstrap_xpctl.bat
+```
+
+The batch file performs the following steps:
+
+1. Validates that `setup-x86-2.874.exe`, `python-3.4.10.zip`, and `agent.py` are present
+2. Creates the `C:\xpctl` directory structure
+3. Installs Cygwin packages (bash, openssh, unzip, curl) from a pinned 2016 HTTP mirror
+4. Unpacks and installs Python 3.4.10 to `C:\Python34` via MSI
+5. Installs the Visual C++ runtime (`vcredist_x86.exe`)
+6. Configures the Cygwin `sshd` service (user: `cyg_server`, password: `xpctl-sshd`)
+7. Copies the packaged agent to `C:\xpctl\agent.py` and starts it on port `9578`
+8. Waits up to 30 seconds for the agent to begin listening
+9. Opens Windows Firewall ports for SSH (22) and the agent (9578)
+
+Once the script completes successfully, connect from your host:
+
+```bash
+xpctl ping
+```
 
 ## Package contents
 

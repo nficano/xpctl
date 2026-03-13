@@ -17,14 +17,25 @@ higher-level reverse-engineering helpers in one installable project.
 - GitHub Actions for CI, docs deployment, and automated releases to PyPI
 - A devcontainer for contributor onboarding
 
+## Installation
+
+```bash
+pip install xpctl
+```
+
 ## Quick start
+
+```bash
+xpctl configure
+xpctl --help
+```
+
+For development:
 
 ```bash
 python3.14 -m venv .venv
 . .venv/bin/activate
 pip install -e ".[dev,docs]"
-xpctl configure
-xpctl --help
 ```
 
 The repository includes `.python-version` pinned to `3.14.3` so tools like
@@ -75,9 +86,24 @@ That writes `artifacts/xp-bootstrap/` with:
 - `agent.py`
 
 Copy that directory onto the XP machine and run `bootstrap_xpctl.bat` as an
-administrator. The batch installs Python 3.4.10, installs Cygwin plus OpenSSH
-from the pinned HTTP mirror, attempts to configure `sshd`, starts the packaged
-agent on port `9578`, and waits until the agent is listening before exiting.
+administrator:
+
+```bat
+cd D:\xp-bootstrap
+bootstrap_xpctl.bat
+```
+
+The batch file performs the following steps:
+
+1. Installs Cygwin packages (bash, openssh, unzip, curl) from a pinned 2016 HTTP mirror
+2. Unpacks and installs Python 3.4.10 to `C:\Python34`
+3. Installs the Visual C++ runtime
+4. Configures the Cygwin `sshd` service (user: `cyg_server`, password: `xpctl-sshd`)
+5. Copies the packaged agent to `C:\xpctl\agent.py` and starts it on port `9578`
+6. Opens firewall ports for SSH (22) and the agent (9578)
+
+The script waits up to 30 seconds for the agent to begin listening before
+exiting. Once it completes, you can connect from your host with `xpctl ping`.
 
 ## Development
 
