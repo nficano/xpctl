@@ -83,10 +83,11 @@ class DefaultTransportFactory(TransportFactory):
 
     def create_ssh(self, profile: ConnectionProfile) -> Transport:
         """Create an unconnected SSH transport."""
+        ssh_port = 22 if profile.port == 9578 else profile.port
         return SSHTransport(
             profile.host,
             profile.user,
             profile.password,
             verify_host_key=profile.verify_host_key,
-            port=profile.port,
+            port=ssh_port,
         )
