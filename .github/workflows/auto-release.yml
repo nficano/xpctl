@@ -1,0 +1,74 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: "!startsWith(github.event.head_commit.message, 'Release v')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Install debaser
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="nficano/debaser"
+          version="$(python scripts/release_info.py latest-github-release-tag "${repo}")"
+          target="x86_64-unknown-linux-gnu"
+          asset="debaser-${version}-${target}.tar.gz"
+          base="https://github.com/${repo}/releases/download/${version}"
+          curl -fsSL "$base/$asset" -o "$asset"
+          tar -xzf "$asset"
+          sudo install -m 0755 "debaser-${version}-${target}/debaser" /usr/local/bin/debaser
+
+      - name: Bump version, tag, and push
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          output="$(python scripts/release.py --bump patch --no-push)"
+          version="$(echo "$output" | grep '^version=' | cut -d= -f2)"
+          release_name="$(echo "$output" | grep '^release_name=' | cut -d= -f2)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release_name=$release_name" >> "$GITHUB_OUTPUT"
+          git push origin main "v${version}"
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Validate distributions
+        run: twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.bump.outputs.version }}"
+          name: "v${{ steps.bump.outputs.version }} (${{ steps.bump.outputs.release_name }})"
+          body: |
+            Release name: `${{ steps.bump.outputs.release_name }}`
+
+            This release was built from `${{ github.sha }}` and published automatically.
+          files: dist/*
