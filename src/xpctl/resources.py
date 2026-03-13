@@ -5,7 +5,6 @@ from __future__ import annotations
 import shutil
 from importlib.resources import files
 from pathlib import Path
-import shutil
 
 INSTALLERS_DIR = Path(__file__).resolve().parent.parent.parent / "installs"
 
