@@ -7,9 +7,10 @@ name = "xpctl"
 dynamic = ["version"]
 description = "Windows XP remote management toolkit with SSH and agent transports."
 readme = "README.md"
-requires-python = ">=3.11"
+license = "MIT"
+requires-python = ">=3.12"
 authors = [
-  { name = "Nick Ficano" },
+  { name = "Nick Ficano", email = "nficano@gmail.com" },
 ]
 keywords = ["windows-xp", "ssh", "debugging", "reverse-engineering", "automation"]
 classifiers = [
@@ -17,28 +18,32 @@ classifiers = [
   "Environment :: Console",
   "Intended Audience :: Developers",
   "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
   "Operating System :: MacOS",
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Debuggers",
   "Topic :: System :: Systems Administration",
+  "Typing :: Typed",
 ]
 dependencies = [
-  "click>=8.1",
-  "paramiko>=3.4",
-  "rich>=13.7",
+  "click>=8.1,<9",
+  "jinja2>=3.1,<4",
+  "paramiko>=3.4,<4",
+  "rich>=13.7,<14",
 ]
 
 [project.optional-dependencies]
 dev = [
   "build>=1.2",
   "pre-commit>=4.0",
+  "pydoclint>=0.5",
+  "pyright>=1.1",
   "pytest>=8.3",
-  "ruff>=0.15",
+  "ruff>=0.9.0,<1.0",
   "twine>=6.1",
 ]
 docs = [
@@ -53,6 +58,7 @@ xpctl = "xpctl.cli:main"
 Documentation = "https://nficano.github.io/xpctl/"
 Issues = "https://github.com/nficano/xpctl/issues"
 Repository = "https://github.com/nficano/xpctl"
+Changelog = "https://github.com/nficano/xpctl/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "src/xpctl/__about__.py"
@@ -88,8 +94,42 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W", "B"]
-ignore = ["B008", "E501"]
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes
+  "I",    # isort
+  "W",    # pycodestyle warnings
+  "B",    # flake8-bugbear
+  "UP",   # pyupgrade
+  "RUF",  # ruff-specific rules
+  "D",    # pydocstyle
+]
+ignore = [
+  "B008",   # do not perform function calls in argument defaults (Click uses this)
+  "E501",   # line too long (handled by formatter)
+  "D100",   # missing docstring in public module (too noisy for CLI modules)
+  "D104",   # missing docstring in public package
+  "D105",   # missing docstring in magic method
+  "D107",   # missing docstring in __init__ (covered by class docstring)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"scripts/**" = ["D"]
+"src/xpctl/assets/**" = ["D"]
+"src/xpctl/cli/*.py" = ["D101", "D103"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.pyright]
+pythonVersion = "3.12"
+pythonPlatform = "All"
+typeCheckingMode = "standard"
+reportMissingImports = "none"
+reportMissingModuleSource = "none"
+include = ["src"]
+exclude = ["src/xpctl/assets/agent.py"]

@@ -1,0 +1,8 @@
+@echo off
+wmic process where "{{ where_clause }}" call terminate
+if errorlevel 1 (
+  echo Failed to stop agent via WMIC. ERRORLEVEL=%ERRORLEVEL% ^(access denied or no matching processes^).
+  exit /b %ERRORLEVEL%
+)
+echo Agent stop requested.
+exit /b 0

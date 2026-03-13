@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import shutil
 from importlib.resources import files
 from pathlib import Path
-import shutil
 
 INSTALLERS_DIR = Path(__file__).resolve().parent.parent.parent / "installs"
+
+__all__ = [
+    "copy_installer_asset",
+    "read_remote_script",
+    "write_agent_source",
+    "write_bootstrap_batch",
+]
 
 
 def write_agent_source(destination: str | Path) -> Path:

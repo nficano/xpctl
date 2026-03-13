@@ -1,0 +1,18 @@
+import os, zipfile
+
+dst = {{ remote_dir | tojson }}
+archive_path = {{ remote_zip | tojson }}
+dst_abs = os.path.normcase(os.path.abspath(dst))
+os.makedirs(dst_abs, exist_ok=True)
+
+with zipfile.ZipFile(archive_path) as archive:
+    for member in archive.infolist():
+        member_path = os.path.normcase(
+            os.path.abspath(os.path.join(dst_abs, member.filename))
+        )
+        if member_path != dst_abs and not member_path.startswith(dst_abs + os.sep):
+            raise ValueError("Archive contains invalid path: %s" % member.filename)
+    archive.extractall(dst_abs)
+
+os.remove(archive_path)
+result = {'installed': True, 'path': dst_abs}

@@ -39,7 +39,7 @@ def test_message_from_dict():
 
 def test_send_recv_over_socket():
     """Spin up a local TCP server and verify send/recv round-trip."""
-    from xpctl.protocol import Message, MessageType, recv_message, send_message
+    from xpctl.protocol import Message, MessageType, Status, recv_message, send_message
 
     received = []
 
@@ -51,7 +51,7 @@ def test_send_recv_over_socket():
         resp = Message(
             id=msg.id,
             type=MessageType.RESPONSE,
-            status="ok",
+            status=Status.OK,
             data={"echo": msg.params},
         )
         send_message(conn, resp)
@@ -106,8 +106,9 @@ def test_agent_protocol_compat():
         ),
         ns,
     )
-    # Skipping full compat test if extraction fails gracefully
-    assert "send_message" in ns or True
+    assert callable(ns["send_message"])
+    assert callable(ns["recv_message"])
+    assert callable(ns["make_response"])
 
 
 def _extract_functions(source, names):

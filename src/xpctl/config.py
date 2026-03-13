@@ -14,15 +14,18 @@ PROFILE_FIELDS = ("hostname", "port", "transport", "username", "password")
 
 
 def config_dir(home: Path | None = None) -> Path:
+    """Return the xpctl configuration directory for *home* or the current user."""
     base = home if home is not None else Path.home()
     return base / CONFIG_DIRNAME
 
 
 def config_path(home: Path | None = None) -> Path:
+    """Return the xpctl configuration file path for *home* or the current user."""
     return config_dir(home) / CONFIG_FILENAME
 
 
 def load_profiles(home: Path | None = None) -> dict[str, dict[str, str]]:
+    """Load all saved connection profiles from disk."""
     path = config_path(home)
     if not path.exists():
         return {}
@@ -40,7 +43,10 @@ def load_profiles(home: Path | None = None) -> dict[str, dict[str, str]]:
     return profiles
 
 
-def load_profile(profile: str = DEFAULT_PROFILE, home: Path | None = None) -> dict[str, str]:
+def load_profile(
+    profile: str = DEFAULT_PROFILE, home: Path | None = None
+) -> dict[str, str]:
+    """Return a single saved profile, or an empty mapping when it is missing."""
     return dict(load_profiles(home).get(profile, {}))
 
 
@@ -49,6 +55,7 @@ def save_profile(
     values: Mapping[str, str | int | None],
     home: Path | None = None,
 ) -> Path:
+    """Persist *profile* to disk and return the written config path."""
     directory = config_dir(home)
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(directory, 0o700)

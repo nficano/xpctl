@@ -14,6 +14,6 @@ if os.path.isdir(path):
 elif os.path.isfile(path):
     os.remove(path)
 else:
-    raise ValueError("Path not found: {0}".format(path))
+    raise ValueError(f"Path not found: {path}")
 
 result = {"deleted": True, "path": path}

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -67,10 +68,10 @@ def has_origin() -> bool:
 def commit_and_tag(version: str, name: str) -> None:
     tag = f"v{version}"
     message = f"Release {tag} ({name})"
-    run("git", "add", "-A")
-    commit = run("git", "commit", "-m", message, check=False)
-    if commit.returncode not in (0, 1):
-        raise RuntimeError(commit.stderr.strip() or "git commit failed")
+    repo_root = Path(run("git", "rev-parse", "--show-toplevel").stdout.strip())
+    rel_path = os.path.relpath(VERSION_FILE, repo_root)
+    run("git", "add", "--", rel_path)
+    run("git", "commit", "-m", message, "--", rel_path)
     run("git", "tag", "-a", tag, "-m", message)
 
 
@@ -85,8 +86,8 @@ def main() -> int:
     args = parse_args()
     current = read_version()
     new_version = args.set_version or bump_version(current, args.bump)
-    write_version(new_version)
     name = release_name()
+    write_version(new_version)
     commit_and_tag(new_version, name)
     if not args.no_push and has_origin():
         push_release(new_version)

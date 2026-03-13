@@ -1,0 +1,19 @@
+import winreg
+key_path = {{ reg_key | tojson }}
+value_name = {{ reg_name | tojson }}
+try:
+    key = winreg.OpenKey(
+        winreg.HKEY_LOCAL_MACHINE,
+        key_path,
+        0,
+        winreg.KEY_SET_VALUE,
+    )
+    try:
+        winreg.DeleteValue(key, value_name)
+        result = {'removed': True}
+    finally:
+        winreg.CloseKey(key)
+except FileNotFoundError:
+    result = {'removed': False, 'message': 'Startup entry not found'}
+except PermissionError:
+    result = {'removed': False, 'message': 'Permission denied'}

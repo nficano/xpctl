@@ -6,7 +6,7 @@ path = payload.get("path", ".")
 recursive = bool(payload.get("recursive", False))
 
 if not os.path.isdir(path):
-    raise ValueError("Directory not found: {0}".format(path))
+    raise ValueError(f"Directory not found: {path}")
 
 
 def stat_entry(p):
