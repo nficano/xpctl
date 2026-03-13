@@ -19,8 +19,12 @@ def test_tcp_transport_retries_transient_connect_errors(monkeypatch):
         def close(self):
             return None
 
-    monkeypatch.setattr("xpctl.transport.tcp.socket.socket", lambda *args, **kwargs: FakeSocket())
-    monkeypatch.setattr("xpctl.transport.tcp.time.sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(
+        "xpctl.transport.tcp.socket.socket", lambda *args, **kwargs: FakeSocket()
+    )
+    monkeypatch.setattr(
+        "xpctl.transport.tcp.time.sleep", lambda seconds: sleeps.append(seconds)
+    )
 
     transport = TCPTransport(host="xp-truvoice-w02", port=9578, timeout=1.0)
     transport.connect()

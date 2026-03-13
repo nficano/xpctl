@@ -11,7 +11,10 @@ def test_write_bootstrap_batch(tmp_path):
     assert "setup-x86-2.874.exe" in text
     assert "python-3.4.10.zip" in text
     assert "agent.py" in text
-    assert "http://ctm.crouchingtigerhiddenfruitbat.org/pub/cygwin/circa/2016/08/30/104223/" in text
+    assert (
+        "http://ctm.crouchingtigerhiddenfruitbat.org/pub/cygwin/circa/2016/08/30/104223/"
+        in text
+    )
     assert "ssh-host-config --yes" in text
     assert 'netsh firewall add portopening TCP 9578 "xpctl Agent"' in text
 
@@ -41,10 +44,14 @@ def test_setup_bootstrap_generates_bundle(tmp_path, monkeypatch):
     monkeypatch.setattr("xpctl.cli.write_bootstrap_batch", fake_write_bootstrap)
 
     output_dir = tmp_path / "bundle"
-    result = runner.invoke(main, ["setup", "bootstrap", "--output-dir", str(output_dir)])
+    result = runner.invoke(
+        main, ["setup", "bootstrap", "--output-dir", str(output_dir)]
+    )
 
     assert result.exit_code == 0
     assert (output_dir / "python-3.4.10.zip").read_bytes() == b"python"
     assert (output_dir / "setup-x86-2.874.exe").read_bytes() == b"cygwin"
     assert (output_dir / "agent.py").read_text(encoding="utf-8") == "agent"
-    assert (output_dir / "bootstrap_xpctl.bat").read_text(encoding="utf-8") == "bootstrap"
+    assert (output_dir / "bootstrap_xpctl.bat").read_text(
+        encoding="utf-8"
+    ) == "bootstrap"
