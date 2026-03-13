@@ -83,10 +83,18 @@ _common = [
         envvar="XPCTL_SSH_USER",
         help="Optional SSH user for SSH transport.",
     ),
+    click.option(
+        "--verify-host-key/--insecure-host-key",
+        "verify_host_key",
+        default=True,
+        show_default=True,
+        help="Verify the SSH host key against known_hosts.",
+    ),
 ]
 
 
 def common_options(fn):
+    """Apply the shared CLI options to *fn*."""
     for opt in reversed(_common):
         fn = opt(fn)
     return fn
@@ -104,16 +112,16 @@ def _resolve_connection_settings(
 
     resolved_host = host if host is not None else (saved.get("hostname") or "")
     saved_port = saved.get("port", "")
-    resolved_port = port if port is not None else int(saved_port or RUNTIME_DEFAULT_PORT)
+    resolved_port = (
+        port if port is not None else int(saved_port or RUNTIME_DEFAULT_PORT)
+    )
     resolved_transport = (
         transport_mode
         if transport_mode is not None
         else (saved.get("transport") or CONFIGURE_DEFAULT_TRANSPORT)
     )
     resolved_user = user if user is not None else saved.get("username", "")
-    resolved_password = (
-        password if password is not None else saved.get("password", "")
-    )
+    resolved_password = password if password is not None else saved.get("password", "")
 
     return {
         "profile": profile_name,
@@ -286,20 +294,21 @@ def _run_host_command(
     cmd: list[str],
     ssh_host: str = "",
     ssh_user: str = "root",
+    verify_host_key: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     full_cmd = cmd
 
     if ssh_host:
         target = f"{ssh_user}@{ssh_host}" if ssh_user else ssh_host
-        full_cmd = [
-            "ssh",
-            "-o",
-            "StrictHostKeyChecking=no",
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            target,
-            *cmd,
-        ]
+        full_cmd = ["ssh"]
+        if not verify_host_key:
+            full_cmd += [
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+            ]
+        full_cmd += [target, *cmd]
 
     return subprocess.run(full_cmd, capture_output=True, text=True)
 
@@ -312,8 +321,8 @@ def _run_host_command(
 @click.group()
 @common_options
 @click.pass_context
-def main(ctx, profile, host, port, transport_mode, password, user):
-    """xpctl — Remote management toolkit for Windows XP VM."""
+def main(ctx, profile, host, port, transport_mode, password, user, verify_host_key):
+    """Xpctl — Remote management toolkit for Windows XP VM."""
     resolved = _resolve_connection_settings(
         profile_name=profile,
         host=host,
@@ -322,8 +331,13 @@ def main(ctx, profile, host, port, transport_mode, password, user):
         user=user,
         password=password,
     )
+    resolved["verify_host_key"] = verify_host_key
     ctx.ensure_object(dict).update(resolved)
-    if ctx.invoked_subcommand and ctx.invoked_subcommand != "configure" and not resolved["host"]:
+    if (
+        ctx.invoked_subcommand
+        and ctx.invoked_subcommand != "configure"
+        and not resolved["host"]
+    ):
         raise click.UsageError(
             "Missing host. Provide --host, set XPCTL_HOST, or run `xpctl configure`."
         )
@@ -350,7 +364,9 @@ def configure(ctx, configure_profile):
     values = _load_prompt_values(profile_name)
 
     while True:
-        selected_profile = _prompt_string("Profile name", profile_name or DEFAULT_PROFILE)
+        selected_profile = _prompt_string(
+            "Profile name", profile_name or DEFAULT_PROFILE
+        )
         if selected_profile != profile_name:
             profile_name = selected_profile
             values = _load_prompt_values(profile_name)
@@ -358,9 +374,7 @@ def configure(ctx, configure_profile):
         values["hostname"] = _prompt_string("Hostname or IP", values["hostname"])
         values["port"] = _prompt_port(values["port"])
         values["username"] = _prompt_string("Username", values["username"])
-        values["password"] = _prompt_string(
-            "Password", values["password"], secret=True
-        )
+        values["password"] = _prompt_string("Password", values["password"], secret=True)
         values["transport"] = _prompt_transport(values["transport"])
 
         try:
@@ -958,7 +972,7 @@ def reg_delete(ctx, key, value_name, force, timeout):
 @click.pass_context
 def reg_export(ctx, key, local_path, timeout):
     """Export a registry key and pull the .reg file locally."""
-    remote_tmp = r"C:\xpctl\tmp\reg_export_{0}.reg".format(int(time.time() * 1000))
+    remote_tmp = rf"C:\xpctl\tmp\reg_export_{int(time.time() * 1000)}.reg"
     with _client(ctx) as client:
         client.exec(
             r'if not exist "C:\xpctl\tmp" mkdir "C:\xpctl\tmp"', timeout=timeout
@@ -1079,7 +1093,7 @@ def mem():
 @click.pass_context
 def memdump(ctx, pid, local_path, remote_path, timeout):
     """Create a MiniDump for a process and pull it locally."""
-    remote_dump = remote_path or r"C:\xpctl\tmp\mem_{0}.dmp".format(pid)
+    remote_dump = remote_path or rf"C:\xpctl\tmp\mem_{pid}.dmp"
     script = read_remote_script("memdump")
     with _client(ctx) as client:
         data = _exec_python_json(
@@ -1503,7 +1517,7 @@ def edit_cmd(ctx, remote_path, editor):
         with _client(ctx) as client:
             client.download(remote_path, tmp_path)
         before = tmp_path.read_bytes()
-        subprocess.run(shlex.split(editor_cmd) + [str(tmp_path)], check=False)
+        subprocess.run([*shlex.split(editor_cmd), str(tmp_path)], check=False)
         after = tmp_path.read_bytes()
         if after == before:
             console.print("[yellow]No changes detected.[/yellow]")
@@ -1545,8 +1559,10 @@ def snapshot():
     show_default=True,
     help="Proxmox only: include VM state.",
 )
-def snapshot_save(vm, name, provider, proxmox_host, proxmox_user, vmstate):
+@click.pass_context
+def snapshot_save(ctx, vm, name, provider, proxmox_host, proxmox_user, vmstate):
     """Save VM snapshot."""
+    params = ctx.ensure_object(dict)
     if provider == "proxmox":
         cmd = ["qm", "snapshot", vm, name]
         if vmstate:
@@ -1555,6 +1571,7 @@ def snapshot_save(vm, name, provider, proxmox_host, proxmox_user, vmstate):
             cmd,
             ssh_host=proxmox_host,
             ssh_user=proxmox_user,
+            verify_host_key=params.get("verify_host_key", True),
         )
         if result.returncode != 0:
             raise click.ClickException(
@@ -1593,7 +1610,9 @@ def snapshot_save(vm, name, provider, proxmox_host, proxmox_user, vmstate):
     show_default=True,
     help="Proxmox only: start VM after rollback.",
 )
+@click.pass_context
 def snapshot_restore(
+    ctx,
     vm,
     name,
     provider,
@@ -1602,6 +1621,7 @@ def snapshot_restore(
     start,
 ):
     """Restore VM snapshot."""
+    params = ctx.ensure_object(dict)
     if provider == "proxmox":
         cmd = ["qm", "rollback", vm, name]
         if start:
@@ -1610,6 +1630,7 @@ def snapshot_restore(
             cmd,
             ssh_host=proxmox_host,
             ssh_user=proxmox_user,
+            verify_host_key=params.get("verify_host_key", True),
         )
         if result.returncode != 0:
             raise click.ClickException(
@@ -1771,7 +1792,9 @@ def setup_bootstrap(output_dir: Path):
         copy_installer_asset(python_archive, output_dir / python_archive)
         copy_installer_asset(cygwin_setup, output_dir / cygwin_setup)
     except (FileNotFoundError, ModuleNotFoundError) as exc:
-        raise click.ClickException(f"Required bootstrap asset is missing: {exc}") from exc
+        raise click.ClickException(
+            f"Required bootstrap asset is missing: {exc}"
+        ) from exc
 
     write_agent_source(output_dir / "agent.py")
     write_bootstrap_batch(output_dir / "bootstrap_xpctl.bat")

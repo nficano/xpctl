@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -137,3 +138,95 @@ def test_setup_list_reports_available_bundles():
     assert result.exit_code == 0
     assert "available" in result.output
     assert "missing" not in result.output
+
+
+def test_run_host_command_verifies_host_key_by_default(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, capture_output, text):
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(cli_support.subprocess, "run", fake_run)
+
+    cli_support._run_host_command(
+        ["qm", "snapshot", "100", "clean"],
+        ssh_host="proxmox.example",
+        ssh_user="root",
+    )
+
+    assert captured["cmd"] == [
+        "ssh",
+        "root@proxmox.example",
+        "qm snapshot 100 clean",
+    ]
+
+
+def test_run_host_command_disables_host_key_checks_only_when_requested(monkeypatch):
+    captured = {}
+
+    def fake_run(cmd, capture_output, text):
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(cli_support.subprocess, "run", fake_run)
+
+    cli_support._run_host_command(
+        ["qm", "snapshot", "100", "clean"],
+        ssh_host="proxmox.example",
+        ssh_user="root",
+        verify_host_key=False,
+    )
+
+    assert captured["cmd"] == [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "root@proxmox.example",
+        "qm snapshot 100 clean",
+    ]
+
+
+def test_snapshot_commands_forward_verify_host_key_flag(monkeypatch):
+    captured: list[bool] = []
+
+    def fake_run_host_command(cmd, ssh_host="", ssh_user="root", verify_host_key=True):
+        captured.append(verify_host_key)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(cli_admin.support, "_run_host_command", fake_run_host_command)
+
+    runner = CliRunner()
+    save_result = runner.invoke(
+        cli.main,
+        [
+            "--host",
+            "xp.example",
+            "--insecure-host-key",
+            "snapshot",
+            "save",
+            "100",
+            "clean",
+            "--proxmox-host",
+            "proxmox.example",
+        ],
+    )
+    restore_result = runner.invoke(
+        cli.main,
+        [
+            "--host",
+            "xp.example",
+            "snapshot",
+            "restore",
+            "100",
+            "clean",
+            "--proxmox-host",
+            "proxmox.example",
+        ],
+    )
+
+    assert save_result.exit_code == 0
+    assert restore_result.exit_code == 0
+    assert captured == [False, True]
