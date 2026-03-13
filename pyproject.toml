@@ -116,7 +116,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D"]
 "scripts/**" = ["D"]
-"src/xpctl/assets/**" = ["D"]
+"src/xpctl/assets/**" = ["D", "RUF012"]
 "src/xpctl/cli/*.py" = ["D101", "D103"]
 
 [tool.ruff.lint.pydocstyle]
