@@ -143,6 +143,26 @@ def test_setup_list_reports_available_bundles():
     assert "missing" not in result.output
 
 
+def test_subcommand_help_does_not_require_host(monkeypatch):
+    monkeypatch.setattr(
+        cli, "sys", type("Sys", (), {"argv": ["xpctl", "script", "--help"]})()
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["script", "--help"])
+
+    assert result.exit_code == 0
+    assert "Usage: main script [OPTIONS] SCRIPT_PATH" in result.output
+    assert "Missing host" not in result.output
+
+
+def test_command_without_host_still_errors():
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["ping"])
+
+    assert result.exit_code != 0
+    assert "Missing host" in result.output
+
+
 def test_run_host_command_verifies_host_key_by_default(monkeypatch):
     captured = {}
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import cast
 
 import click
@@ -30,6 +31,12 @@ from .support import common_options
 from .system import register_system_commands
 
 
+def _is_help_request(ctx: click.Context) -> bool:
+    """Return True when the current invocation is only asking for help text."""
+    help_flags = set(ctx.help_option_names)
+    return any(arg in help_flags for arg in sys.argv[1:])
+
+
 @click.group()
 @common_options
 @click.pass_context
@@ -52,6 +59,7 @@ def main(ctx, profile, host, port, transport_mode, password, user, verify_host_k
     if (
         ctx.invoked_subcommand
         and ctx.invoked_subcommand not in {"configure", "setup"}
+        and not _is_help_request(ctx)
         and not resolved["host"]
     ):
         raise click.UsageError(
